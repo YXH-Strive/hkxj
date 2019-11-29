@@ -29,8 +29,25 @@ public class CourseSubscriptionMessage {
     private int section;
 
     public String getPushContent(){
-        if(Objects.isNull(detailDto)) { return null; }
+        /*if(Objects.isNull(detailDto)) { return null; }
         return "第" + detailDto.getDetail().getOrder() + "节" +
-                "\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();
+                "\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();*/
+        if(Objects.isNull(detailDto)) { return null; }
+        if (detailDto.getDetail().getOrder().equals(1)) {
+            return "上午第一节" +"\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();
+        }
+        if (detailDto.getDetail().getOrder().equals(3)) {
+            return "上午第二节" +"\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();
+        }
+        if (detailDto.getDetail().getOrder().equals(5)) {
+            return "下午第一节" +"\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();
+        }
+        if (detailDto.getDetail().getOrder().equals(7)) {
+            return "下午第二节" +"\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();
+        }
+        if (detailDto.getDetail().getOrder().equals(9)) {
+            return "晚上第一节" +"\n" + detailDto.getUrpCourse().getCourseName() + "\n" + detailDto.getDetail().getRoomName();
+        }
+        return null;
     }
 }
