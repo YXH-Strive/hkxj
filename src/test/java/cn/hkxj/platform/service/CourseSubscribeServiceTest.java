@@ -1,9 +1,11 @@
 package cn.hkxj.platform.service;
 
 import cn.hkxj.platform.PlatformApplication;
+import cn.hkxj.platform.pojo.dto.CourseTimeTableDetailDto;
 import cn.hkxj.platform.pojo.wechat.CourseGroupMsg;
 import cn.hkxj.platform.pojo.wechat.CourseSubscriptionMessage;
 import org.junit.Test;
+import org.junit.platform.commons.util.StringUtils;
 import org.junit.runner.RunWith;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
@@ -12,8 +14,11 @@ import org.springframework.test.context.web.WebAppConfiguration;
 
 import javax.annotation.Resource;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @author Yuki
@@ -22,7 +27,6 @@ import java.util.Set;
 @RunWith(SpringRunner.class)
 @SpringBootTest(classes = PlatformApplication.class)
 @WebAppConfiguration
-@TestPropertySource(locations = "classpath:application-local.properties")
 public class CourseSubscribeServiceTest {
 
     @Resource
@@ -30,22 +34,27 @@ public class CourseSubscribeServiceTest {
 
     @Test
     public void getCoursesSubscribeForCurrentDay() {
-        System.out.println("entering");
-        for(int i =  0; i <= 8; i+=2){
-            Map<String, Set<CourseSubscriptionMessage>> map = courseSubscribeService.getSubscriptionMessages(CourseSubscribeService.FIRST_SECTION + i);
-            map.forEach((appid, msgs) -> {
-                if(msgs == null) return;
-                System.out.println("appid = " + appid);
-                System.err.println(msgs);
-                for(CourseSubscriptionMessage msg : msgs){
-                    System.err.println("课程内容 " + msg.getPushContent());
-                }
-            });
-        }
+
+//        for (CourseSubscriptionMessage message : courseSubscribeService.getSubscriptionMessages(CourseSubscribeService.FIRST_SECTION)) {
+//            System.out.println(message);
+//        }
+
+
+        List<CourseSubscriptionMessage> collect = courseSubscribeService.getSubscriptionMessages(CourseSubscribeService.FIRST_SECTION).stream()
+                .filter(subscriptionMessage -> !Objects.isNull(subscriptionMessage))
+                .filter(subscriptionMessage -> !Objects.isNull(subscriptionMessage.getDetailDto()))
+                .filter(x-> StringUtils.isNotBlank(x.getPushContent()))
+                .collect(Collectors.toList());
+
+        System.out.println(collect.size());
     }
 
     @Test
     public void getCourseTimeTables() {
+        CourseTimeTableDetailDto tablesSection = courseSubscribeService.getCourseTimeTablesSection(2017026003, 1);
+
+        System.out.println(tablesSection);
+
 //        Map<String, Set<CourseGroupMsg>> map = courseSubscribeService.getCoursesSubscribeForCurrentDay();
 //        map.forEach((appid, msgs) -> {
 //            System.out.println("appid = " + appid);

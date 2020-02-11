@@ -1,8 +1,5 @@
 package cn.hkxj.platform.service.wechat;
 
-import cn.hkxj.platform.exceptions.OpenidExistException;
-import cn.hkxj.platform.exceptions.PasswordUncorrectException;
-import cn.hkxj.platform.exceptions.ReadTimeoutException;
 import cn.hkxj.platform.pojo.Student;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Test;
@@ -20,7 +17,8 @@ public class StudentBindServiceTest {
 
     @Test
     public void studentBind() {
-        Student student = studentBindService.studentLogin("2017025299", "1");
+        Student student = studentBindService.studentLogin("2016023344", "1");
         assert student != null;
     }
+
 }

@@ -1,21 +1,18 @@
 package cn.hkxj.platform.controller;
 
-import cn.hkxj.platform.config.wechat.WechatMpConfiguration;
 import cn.hkxj.platform.config.wechat.WechatMpProProperties;
 import cn.hkxj.platform.dao.ClassDao;
 import cn.hkxj.platform.dao.StudentDao;
-import cn.hkxj.platform.exceptions.PasswordUncorrectException;
+import cn.hkxj.platform.exceptions.PasswordUnCorrectException;
 import cn.hkxj.platform.pojo.Classes;
 import cn.hkxj.platform.pojo.CourseTimeTableDetail;
 import cn.hkxj.platform.pojo.Student;
 import cn.hkxj.platform.service.CourseTimeTableService;
 import cn.hkxj.platform.service.NewUrpSpiderService;
 import cn.hkxj.platform.spider.NewUrpSpider;
+import cn.hkxj.platform.task.GradeAutoUpdateTask;
 import lombok.extern.slf4j.Slf4j;
-import me.chanjar.weixin.common.api.WxConsts;
 import me.chanjar.weixin.common.error.WxErrorException;
-import me.chanjar.weixin.mp.api.WxMpService;
-import me.chanjar.weixin.mp.bean.material.WxMpMaterialFileBatchGetResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,7 +31,7 @@ public class TestController {
     @Resource
     private CourseTimeTableService courseTimeTableService;
     @Resource
-    private WechatMpProProperties wechatMpProProperties;
+    private GradeAutoUpdateTask gradeAutoUpdateTask;
 
     @Resource
     private ClassDao classDao;
@@ -52,7 +49,7 @@ public class TestController {
                         courseTimeTableService.getAllCourseTimeTableDetails(student);
                         log.info("class {} student {} success",classes.getId(), student.getName());
                         break;
-                    }catch (PasswordUncorrectException e){
+                    }catch (PasswordUnCorrectException e){
                         studentDao.updatePasswordUnCorrect(student.getAccount());
                         log.error("class {} student {} password not correct", classes.getId(), student.getName());
                     } catch (Exception e){
@@ -81,7 +78,7 @@ public class TestController {
         student.setPassword(password);
         Classes classes = new Classes();
         classes.setId(316);
-        student.setClasses(classes);
+//        student.setClasses(classes);
 //        GradeSearchResult gradeSearchResult = newGradeSearchService.getCurrentGrade(student);
 //        log.info(NewGradeSearchService.gradeListToText(gradeSearchResult.getData()));
         return newUrpSpiderService.getUrpCourseTimeTable(student).toString();
@@ -94,23 +91,10 @@ public class TestController {
         student.setAccount(2017026003);
         student.setPassword("1");
         classes.setId(503);
-        student.setClasses(classes);
+//        student.setClasses(classes);
         System.out.println(courseTimeTableService.convertToText(courseTimeTableService.getDetailsForCurrentDay(student)));
     }
 
-    @RequestMapping("/testcttweek")
-    public void testCourseTimeTableWeek(){
-
-        Student student = new Student();
-        student.setAccount(2016024170);
-        student.setPassword("1");
-        Classes classes = new Classes();
-        classes.setId(316);
-        student.setClasses(classes);
-        List<CourseTimeTableDetail> details = courseTimeTableService.getDetailsForCurrentWeek(student);
-        System.out.println("size = " + details.size());
-        System.out.println(courseTimeTableService.convertToText(details));
-    }
 
     @RequestMapping("tests")
     public String test(String echostr){
@@ -124,6 +108,19 @@ public class TestController {
         NewUrpSpider spider = new NewUrpSpider("2017021517", "1");
         return "ok";
     }
+
+
+    @RequestMapping("/log")
+    public String testLog(){
+        throw new NullPointerException();
+    }
+
+    @RequestMapping("/update")
+    public String testGrade(){
+        gradeAutoUpdateTask.autoUpdateGrade();
+        return "ok";
+    }
+
 
     public static void main(String[] args) throws IOException {
 

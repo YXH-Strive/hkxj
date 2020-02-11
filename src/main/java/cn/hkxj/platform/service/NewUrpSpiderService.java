@@ -1,7 +1,7 @@
 package cn.hkxj.platform.service;
 
 import cn.hkxj.platform.dao.StudentDao;
-import cn.hkxj.platform.exceptions.PasswordUncorrectException;
+import cn.hkxj.platform.exceptions.PasswordUnCorrectException;
 import cn.hkxj.platform.exceptions.UrpException;
 import cn.hkxj.platform.pojo.Classes;
 import cn.hkxj.platform.pojo.Course;
@@ -12,8 +12,15 @@ import cn.hkxj.platform.spider.model.UrpStudentInfo;
 import cn.hkxj.platform.spider.newmodel.SearchResult;
 import cn.hkxj.platform.spider.newmodel.course.UrpCourseForSpider;
 import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTableForSpider;
+import cn.hkxj.platform.spider.newmodel.evaluation.EvaluationPagePost;
+import cn.hkxj.platform.spider.newmodel.evaluation.EvaluationPost;
+import cn.hkxj.platform.spider.newmodel.evaluation.searchresult.TeachingEvaluation;
 import cn.hkxj.platform.spider.newmodel.examtime.UrpExamTime;
 import cn.hkxj.platform.spider.newmodel.grade.CurrentGrade;
+import cn.hkxj.platform.spider.newmodel.grade.detail.GradeDetailSearchPost;
+import cn.hkxj.platform.spider.newmodel.grade.detail.UrpGradeDetailForSpider;
+import cn.hkxj.platform.spider.newmodel.grade.general.UrpGeneralGradeForSpider;
+import cn.hkxj.platform.spider.newmodel.grade.scheme.Scheme;
 import cn.hkxj.platform.spider.newmodel.searchclass.ClassInfoSearchResult;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomPost;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomResult;
@@ -47,17 +54,40 @@ public class NewUrpSpiderService {
     private ClassService classService;
     @Resource
     private StudentDao studentDao;
+    @Resource
+    private OpenIdService openIdService;
 
     @Retryable(value = UrpException.class, maxAttempts = 3)
-    CurrentGrade getCurrentTermGrade(String account, String password){
-        NewUrpSpider spider = getSpider(account, password);
+    CurrentGrade getCurrentTermGrade(Student student){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
         return spider.getCurrentGrade();
+    }
+
+    CurrentGrade getCurrentTermGrade(String account){
+        Student student = studentDao.selectStudentByAccount(Integer.parseInt(account));
+        return getCurrentTermGrade(student);
+    }
+
+    /**
+     * 这个方法只有基本得成绩信息  包括相信成绩信息的抓取使用{@see #getCurrentTermGrade()}
+     */
+    @Retryable(value = UrpException.class, maxAttempts = 3)
+    List<UrpGeneralGradeForSpider> getCurrentGeneralGrade(Student student){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        return spider.getCurrentGeneralGrade();
+    }
+
+    List<UrpGeneralGradeForSpider> getCurrentGeneralGrade(String account){
+        Student student = studentDao.selectStudentByAccount(Integer.parseInt(account));
+        return getCurrentGeneralGrade(student);
     }
 
     UrpCourseForSpider getCourseFromSpider(String account, String password, String uid){
         NewUrpSpider spider = getSpider(account, password);
         return spider.getUrpCourse(uid);
     }
+
+
 
     UrpCourseForSpider getCourseFromSpider(Student student, String uid){
         return getCourseFromSpider(student.getAccount().toString(), student.getPassword(), uid);
@@ -112,14 +142,22 @@ public class NewUrpSpiderService {
     }
 
     @Retryable(value = UrpException.class, maxAttempts = 3)
+    public SearchResult<SearchCourseResult> searchCourseBasicInfo(SearchCoursePost searchCoursePost){
+        Student student = studentDao.selectStudentByAccount(2014025838);
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        return spider.searchCourseBasicInfo(searchCoursePost).getData();
+    }
+
+    @Retryable(value = UrpException.class, maxAttempts = 3)
     public List<List<CourseTimetableSearchResult>> searchCourseTimeTable(Course course){
         Student student = studentDao.selectStudentByAccount(2014025838);
         NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
         return spider.getUrpCourseTimeTableByCourse(course);
     }
 
+    @Retryable(value = UrpException.class, maxAttempts = 3)
     public void checkStudentPassword(String account, String password){
-        NewUrpSpider spider = getSpider(account, password);
+        new NewUrpSpider(account, password);
     }
 
     @Retryable(value = UrpException.class, maxAttempts = 3)
@@ -128,9 +166,30 @@ public class NewUrpSpiderService {
         return spider.getUrpCourseTimeTable();
     }
 
+
+    @Retryable(value = UrpException.class, maxAttempts = 3)
+    public TeachingEvaluation searchTeachingEvaluationInfo(Student student){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        return spider.searchTeachingEvaluationInfo();
+    }
+
+
+    @Retryable(value = UrpException.class, maxAttempts = 3)
+    public void evaluate(Student student, EvaluationPost evaluationPost){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        spider.evaluation(evaluationPost);
+    }
+
+    @Retryable(value = UrpException.class, maxAttempts = 3)
+    public String getEvaluationToken(Student student, EvaluationPagePost evaluationPagePost){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        return spider.getEvaluationToken(evaluationPagePost);
+    }
+
     /**
      * 获取学生信息
      */
+    @Retryable(value = UrpException.class, maxAttempts = 3)
     public Student getStudentInfo(String account, String password){
         NewUrpSpider spider = getSpider(account, password);
 
@@ -149,16 +208,30 @@ public class NewUrpSpiderService {
         return spider.getExamTime();
     }
 
+    @Retryable(value = UrpException.class, maxAttempts = 3)
     public List<UrpExamTime> getExamTime(Student student){
-
         return getExamTime(student.getAccount().toString(), student.getPassword());
     }
+
+    @Retryable(value = UrpException.class, maxAttempts = 3)
+    public UrpGradeDetailForSpider getGradeDetail(Student student, GradeDetailSearchPost gradeDetailSearchPost){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        return spider.getUrpGradeDetail(gradeDetailSearchPost);
+    }
+
+
+    @Retryable(value = UrpException.class, maxAttempts = 3)
+    public List<Scheme> getSchemeGrade(Student student){
+        NewUrpSpider spider = getSpider(student.getAccount().toString(), student.getPassword());
+        return spider.getSchemeGrade();
+    }
+
 
     private Student getUserInfo(UrpStudentInfo studentInfo){
 
         Classes classes = classService.parseSpiderResult(studentInfo);
         Student student = wrapperToStudent(studentInfo);
-        student.setClasses(classes);
+        student.setClasses(classes.getId());
 
         return student;
     }
@@ -166,8 +239,9 @@ public class NewUrpSpiderService {
     private NewUrpSpider getSpider(String account, String password){
         try {
             return new NewUrpSpider(account, password);
-        }catch (PasswordUncorrectException e){
+        }catch (PasswordUnCorrectException e){
             studentDao.updatePasswordUnCorrect(Integer.parseInt(account));
+            openIdService.openIdUnbindAllPlatform(Integer.parseInt(account));
             throw e;
         }
 

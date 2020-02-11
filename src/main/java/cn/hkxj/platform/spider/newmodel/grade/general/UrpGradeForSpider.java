@@ -1,7 +1,9 @@
 package cn.hkxj.platform.spider.newmodel.grade.general;
 
+import cn.hkxj.platform.pojo.Grade;
 import cn.hkxj.platform.spider.newmodel.grade.detail.UrpGradeDetailForSpider;
 import lombok.Data;
+import org.apache.commons.lang3.StringUtils;
 
 
 /**
@@ -19,5 +21,7 @@ public class UrpGradeForSpider {
      * 详细成绩
      */
     private UrpGradeDetailForSpider urpGradeDetailForSpider;
+
+
 
 }

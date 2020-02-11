@@ -6,17 +6,22 @@ import cn.hkxj.platform.pojo.UrpClassroom;
 import cn.hkxj.platform.pojo.constant.RedisKeys;
 import cn.hkxj.platform.spider.model.UrpStudentInfo;
 import cn.hkxj.platform.spider.model.VerifyCode;
-import cn.hkxj.platform.spider.newmodel.CourseRelativeInfo;
 import cn.hkxj.platform.spider.newmodel.SearchResult;
+import cn.hkxj.platform.spider.newmodel.SearchResultDateWrapper;
 import cn.hkxj.platform.spider.newmodel.course.UrpCourseForSpider;
 import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTableForSpider;
 import cn.hkxj.platform.spider.newmodel.emptyroom.EmptyRoomPojo;
 import cn.hkxj.platform.spider.newmodel.emptyroom.EmptyRoomPost;
+import cn.hkxj.platform.spider.newmodel.evaluation.EvaluationPagePost;
+import cn.hkxj.platform.spider.newmodel.evaluation.EvaluationPost;
+import cn.hkxj.platform.spider.newmodel.evaluation.searchresult.TeachingEvaluation;
 import cn.hkxj.platform.spider.newmodel.examtime.UrpExamTime;
 import cn.hkxj.platform.spider.newmodel.grade.CurrentGrade;
+import cn.hkxj.platform.spider.newmodel.grade.detail.GradeDetailSearchPost;
 import cn.hkxj.platform.spider.newmodel.grade.detail.UrpGradeDetailForSpider;
 import cn.hkxj.platform.spider.newmodel.grade.general.UrpGeneralGradeForSpider;
 import cn.hkxj.platform.spider.newmodel.grade.general.UrpGradeForSpider;
+import cn.hkxj.platform.spider.newmodel.grade.scheme.Scheme;
 import cn.hkxj.platform.spider.newmodel.searchclass.ClassInfoSearchResult;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomPost;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomResult;
@@ -49,8 +54,12 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -58,6 +67,26 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class NewUrpSpider {
+
+    static {
+        Thread produceThread1 = new Thread(new CaptchaProducer());
+        Thread produceThread2 = new Thread(new CaptchaProducer());
+        Thread cleanThread = new Thread(new CaptchaCleaner());
+
+        produceThread1.setName("produceThread1");
+        produceThread2.setName("produceThread2");
+        produceThread1.start();
+        produceThread2.start();
+        cleanThread.start();
+        try {
+            stringRedisTemplate = ApplicationUtil.getBean("stringRedisTemplate");
+            proxyselector = ApplicationUtil.getBean("urpSpiderProxySelector");
+        } catch (Exception e) {
+            log.error("inject error ", e);
+        }
+
+    }
+
     private static final String ROOT = "http://xsurp.usth.edu.cn";
     /**
      * 验证码
@@ -87,7 +116,7 @@ public class NewUrpSpider {
     private static final String EXAM_TIME = ROOT + "/student/examinationManagement/examPlan/index";
     private static final String COURSE_TIME_TABLE = ROOT + "/student/courseSelect/thisSemesterCurriculum/ajaxStudentSchedule/callback";
     private static final String TEACHER_COURSE_TIME_TABLE = ROOT + "/student/teachingResources/teacherCurriculum" +
-        "/searchCurriculumInfo/callback";
+            "/searchCurriculumInfo/callback";
     private static final String MAKE_UP_GRADE = ROOT + "/student/examinationManagement/examGrade/search";
     /**
      * 空教室查询
@@ -116,7 +145,7 @@ public class NewUrpSpider {
      * 教室课表查询
      */
     private static final String CLASSROOM_TIME_TABLE = ROOT + "/student/teachingResources/classroomCurriculum" +
-        "/searchCurriculum/callback?planNumber=%s&campusNumber=%s&teachingBuildingNumber=%s" +
+            "/searchCurriculum/callback?planNumber=%s&campusNumber=%s&teachingBuildingNumber=%s" +
             "&classroomNumber=%s";
     /**
      * 查询课程信息
@@ -128,6 +157,35 @@ public class NewUrpSpider {
      */
     private static final String COURSE_TIMETABLE = ROOT + "/student/teachingResources/courseCurriculum" +
             "/searchCurriculum/callback?planCode=%s&courseCode=%s&courseSequenceCode=%s";
+
+    /**
+     * 课程基本信息 这个url抓取的主要目的是，有些课程的详细信息无法查询到，只能用这个来查询基本信息
+     */
+    private static final String COURSE_BASIC_INFO = ROOT + "/student/integratedQuery/course/courseBasicInformation/show";
+
+
+    /**
+     * 教学评估 teachingEvaluation/teachingEvaluation/search
+     */
+    private static final String Teaching_Evaluation = ROOT + "/student/teachingEvaluation/teachingEvaluation/search";
+
+    /**
+     * 问卷提交
+     */
+    private static final String EVALUATION = ROOT + "/student/teachingEvaluation/teachingEvaluation/evaluation";
+
+    /**
+     * 问卷页面
+     */
+    private static final String EVALUATION_PAGE = ROOT + "/student/teachingEvaluation/teachingEvaluation" +
+            "/evaluationPage";
+
+
+    /**
+     * 方案成绩页面  包含所有的成绩
+     * 选用这个地址的原因是因为，他在所有这些不规范的接口中算是比较规范的一个了
+     */
+    private static final String SCHEME_GRADE = ROOT + "/student/integratedQuery/scoreQuery/schemeScores/callback";
 
     private static StringRedisTemplate stringRedisTemplate;
 
@@ -144,12 +202,16 @@ public class NewUrpSpider {
 
     private static final UrpCookieJar COOKIE_JAR = new UrpCookieJar();
 
+    private static ProxySelector proxyselector;
+
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .cookieJar(COOKIE_JAR)
             .retryOnConnectionFailure(true)
             .connectTimeout(500L, TimeUnit.MILLISECONDS)
-            .addInterceptor(new RetryInterceptor(10))
+            .readTimeout(800L, TimeUnit.MILLISECONDS)
+            .addInterceptor(new RetryInterceptor(5))
             .followRedirects(false)
+            .proxySelector(proxyselector)
             .build();
 
     private final static Headers HEADERS = new Headers.Builder()
@@ -166,21 +228,8 @@ public class NewUrpSpider {
     private String account;
     private String password;
 
-    private static ArrayBlockingQueue<PreLoadCaptcha> queue = new ArrayBlockingQueue<>(5);
+    private final static BlockingQueue<PreLoadCaptcha> queue = new ArrayBlockingQueue<>(5);
 
-
-    static {
-        Thread produceThread = new Thread(new CaptchaProducer());
-        Thread cleanThread = new Thread(new CaptchaCleaner());
-        produceThread.start();
-        cleanThread.start();
-        try {
-            stringRedisTemplate = ApplicationUtil.getBean("stringRedisTemplate");
-        } catch (Exception e) {
-            log.error("inject error ", e);
-        }
-
-    }
 
     /**
      * @param account  学号
@@ -189,6 +238,7 @@ public class NewUrpSpider {
      */
     public NewUrpSpider(String account, String password) {
         MDC.put("account", account);
+        MDC.remove("preLoad");
         this.account = account;
         this.password = password;
         if (hasLoginCookieCache(account)) {
@@ -196,14 +246,15 @@ public class NewUrpSpider {
         }
         PreLoadCaptcha preLoadCaptcha;
         VerifyCode verifyCode = null;
-        while ((preLoadCaptcha = queue.poll()) != null){
-            if(System.currentTimeMillis() - preLoadCaptcha.createDate.getTime() < 1000*60*20){
+
+        while ((preLoadCaptcha = queue.poll()) != null) {
+            if (!preLoadCaptcha.isExpire()) {
                 MDC.put("preLoad", preLoadCaptcha.preloadCookieId);
                 verifyCode = preLoadCaptcha.captcha;
                 break;
             }
         }
-        if(verifyCode == null){
+        if (verifyCode == null) {
             verifyCode = getCaptcha();
         }
 
@@ -233,18 +284,24 @@ public class NewUrpSpider {
 
         Request request = new Request.Builder()
                 .url(MAKE_UP_GRADE)
+                .headers(HEADERS)
                 .post(body)
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
         return parseObject(result, new TypeReference<List<Map<String, Object>>>() {
         });
     }
 
+    /**
+     * 获取当期学期成绩 包含详细数据
+     * @return
+     */
     public CurrentGrade getCurrentGrade() {
-        List<UrpGeneralGradeForSpider> urpGeneralGradeForSpiders = getUrpGeneralGrades();
+        List<UrpGeneralGradeForSpider> urpGeneralGradeForSpiders = getCurrentGeneralGrade();
         List<UrpGradeForSpider> urpGradeForSpiderList = Lists.newArrayList();
         urpGeneralGradeForSpiders.forEach(urpGeneralGradeForSpider -> {
             UrpGradeForSpider urpGradeForSpider = getUrpGradeForSpider(urpGeneralGradeForSpider);
+            urpGeneralGradeForSpider.getId().setCourseSequenceNumber(urpGeneralGradeForSpider.getCoureSequenceNumber());
             urpGradeForSpiderList.add(urpGradeForSpider);
         });
         CurrentGrade currentGrade = new CurrentGrade();
@@ -252,42 +309,75 @@ public class NewUrpSpider {
         return currentGrade;
     }
 
+    public List<Scheme> getSchemeGrade() {
+
+        Request request = new Request.Builder()
+                .url(SCHEME_GRADE)
+                .headers(HEADERS)
+                .get()
+                .build();
+
+        String content = getContent(request);
+        TypeReference<List<Scheme>> typeReference = new TypeReference<List<Scheme>>() {
+        };
+        return parseObject(content, typeReference);
+
+    }
+
+
     private UrpGradeForSpider getUrpGradeForSpider(UrpGeneralGradeForSpider urpGeneralGradeForSpider) {
         UrpGradeForSpider urpGradeForSpider = new UrpGradeForSpider();
         urpGradeForSpider.setUrpGeneralGradeForSpider(urpGeneralGradeForSpider);
-        urpGradeForSpider.setUrpGradeDetailForSpider(getUrpGradeDetail(urpGeneralGradeForSpider));
+        urpGradeForSpider.setUrpGradeDetailForSpider(getUrpGradeDetail(null));
         return urpGradeForSpider;
     }
 
-    private List<UrpGeneralGradeForSpider> getUrpGeneralGrades() {
+    public List<UrpGeneralGradeForSpider> getCurrentGeneralGrade() {
         Request request = new Request.Builder()
                 .url(CURRENT_TERM_GRADE)
                 .get()
+                .headers(HEADERS)
                 .build();
-        String result = new String(execute(request));
+
+        String result = getContent(request);
+        log.debug("{} {} current grade {}", MDC.get("preLoad"), MDC.get("account"), result);
         List<Map<String, Object>> list = parseObject(result, new TypeReference<List<Map<String, Object>>>() {
         });
         JSONArray jsonArray = (JSONArray) list.get(0).get("list");
-        return jsonArray.toJavaList(UrpGeneralGradeForSpider.class);
+
+        List<UrpGeneralGradeForSpider> grade = jsonArray.toJavaList(UrpGeneralGradeForSpider.class);
+
+        grade.stream().findFirst().ifPresent(x -> {
+            if (!account.equals(x.getId().getStudentNumber())) {
+                log.error("date error. user account: {} return account {}", account,
+                        x.getId().getStudentNumber());
+                COOKIE_JAR.clearSession();
+                throw new UrpException(String.format("date error. user account: %s return account %s", account,
+                        x.getId().getStudentNumber()));
+            }
+        });
+
+        return grade;
     }
 
-    private UrpGradeDetailForSpider getUrpGradeDetail(UrpGeneralGradeForSpider urpGeneralGradeForSpider) {
+
+    public UrpGradeDetailForSpider getUrpGradeDetail(GradeDetailSearchPost gradeDetailSearchPost) {
         FormBody.Builder params = new FormBody.Builder();
-        CourseRelativeInfo courseRelativeInfo = urpGeneralGradeForSpider.getId();
-        FormBody body = params.add("zxjxjhh", courseRelativeInfo.getExecutiveEducationPlanNumber())
-                .add("kch", courseRelativeInfo.getCourseNumber())
-                .add("kssj", courseRelativeInfo.getExamtime())
-                .add("kxh", urpGeneralGradeForSpider.getCoureSequenceNumber())
+        FormBody body = params.add("zxjxjhh", gradeDetailSearchPost.getExecutiveEducationPlanNumber())
+                .add("kch", gradeDetailSearchPost.getCourseNumber())
+                .add("kssj", gradeDetailSearchPost.getExamTime())
+                .add("kxh", gradeDetailSearchPost.getCourseSequenceNumber())
                 .build();
 
         Request request = new Request.Builder()
                 .url(CURRENT_TERM_GRADE_DETAIL)
                 .post(body)
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
         return parseObject(result, gradeDetailTypeReference);
     }
 
+    @Deprecated
     public UrpCourseForSpider getUrpCourse(String uid) {
         FormBody.Builder params = new FormBody.Builder();
         FormBody body = params.add("kch", uid).build();
@@ -295,7 +385,7 @@ public class NewUrpSpider {
                 .url(COURSE_DETAIL)
                 .post(body)
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
         flashCache();
         //因为爬虫爬取的结果是个集合，所以先转成list
         List<UrpCourseForSpider> courses = parseObject(result, courseTypeReference);
@@ -338,12 +428,12 @@ public class NewUrpSpider {
 
         if (StringUtils.isEmpty(location)) {
             COOKIE_JAR.clearSession();
-            throw new UrpRequestException(request.url().toString(), response.code(),  response.message());
+            throw new UrpRequestException(request.url().toString(), response.code(), response.message());
         } else if (location.contains("badCaptcha")) {
             COOKIE_JAR.clearSession();
             throw new UrpVerifyCodeException("captcha: " + captcha + " code uuid :" + uuid);
         } else if (location.contains("badCredentials")) {
-            throw new PasswordUncorrectException("account: " + account);
+            throw new PasswordUnCorrectException("account: " + account);
         } else if (location.contains("concurrentSessionExpired")) {
             COOKIE_JAR.clearSession();
             throw new UrpSessionExpiredException("account: " + account + "session expired");
@@ -357,8 +447,7 @@ public class NewUrpSpider {
     /**
      * 获取空教室信息
      *
-     * @param emptyRoomPost
-     * @return
+     * @param emptyRoomPost 请求参数
      */
     public EmptyRoomPojo getEmptyRoom(EmptyRoomPost emptyRoomPost) {
         FormBody.Builder params = new FormBody.Builder();
@@ -367,17 +456,17 @@ public class NewUrpSpider {
                 .add("codeCampusListNumber", "01")
                 .add("teaNum", emptyRoomPost.getTeaNum())
                 .add("wSection", emptyRoomPost.getWSection())
-                .add("pageNum",emptyRoomPost.getPageNum())
-                .add("pageSize",emptyRoomPost.getPageSize())
+                .add("pageNum", emptyRoomPost.getPageNum())
+                .add("pageSize", emptyRoomPost.getPageSize())
                 .build();
         Request request = new Request.Builder()
                 .url(EMPTY_ROOM)
                 .headers(HEADERS)
                 .post(body)
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
         try {
-            List<EmptyRoomPojo> pojo=JSON.parseObject(result, new TypeReference<List<EmptyRoomPojo>>() {
+            List<EmptyRoomPojo> pojo = JSON.parseObject(result, new TypeReference<List<EmptyRoomPojo>>() {
             });
             return pojo.get(0);
         } catch (JSONException e) {
@@ -386,7 +475,7 @@ public class NewUrpSpider {
             }
             log.error("parse grade error {}", result, e);
             COOKIE_JAR.clearSession();
-            throw new UrpSessionExpiredException("account: " + account + "session expired");
+            throw new UrpSessionExpiredException("account: " + account + " session expired");
         }
     }
 
@@ -396,10 +485,10 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .get()
                 .build();
-        String s = new String(execute(request));
-        if (s.contains("invalidSession")) {
+        String s = getContent(request);
+        if (s.contains("invalidSession") || s.contains("login")) {
             COOKIE_JAR.clearSession();
-            throw new UrpSessionExpiredException("account: " + account + "session expired");
+            throw new UrpSessionExpiredException("account: " + account + " session expired");
         }
         Document document = Jsoup.parse(s);
         Elements elements = document.getElementsByClass("clearfix");
@@ -409,6 +498,7 @@ public class NewUrpSpider {
             if (list.size() == 7) {
                 result.add(new UrpExamTime()
                         .setCourseName(list.get(0))
+                        .setDate("")
                         .setExamName(list.get(1)));
             }
             if (list.size() == 11) {
@@ -433,10 +523,27 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .get()
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
         String regex = "\"dateList\": [.*]}$";
         result = result.replaceAll(regex, "");
-        return parseObject(result, UrpCourseTimeTableForSpider.class);
+        if (log.isDebugEnabled()) {
+            log.debug("{} {} urp course timetable {}", MDC.get("preLoad"), MDC.get("account"), result);
+        }
+
+        UrpCourseTimeTableForSpider tableForSpider = parseObject(result, UrpCourseTimeTableForSpider.class);
+
+        tableForSpider.getDetails().stream()
+                .findFirst().flatMap(detail -> detail.entrySet().stream()
+                .findFirst()).ifPresent(entry -> {
+            String number = entry.getValue().getCourseRelativeInfo().getStudentNumber();
+            if (!account.equals(number)) {
+                log.error("data error preloadTrace:{}  account:{} date:{}", MDC.get("preLoad"), MDC.get("account"), tableForSpider);
+                COOKIE_JAR.clearSession();
+                throw new UrpException(String.format("date error. user account: %s return account %s", account,
+                        number));
+            }
+        });
+        return tableForSpider;
 
     }
 
@@ -448,7 +555,7 @@ public class NewUrpSpider {
                 .get()
                 .build();
 
-        Map<String, String> userInfo = parseUserInfo(new String(execute(request)));
+        Map<String, String> userInfo = parseUserInfo(getContent(request));
 
         UrpStudentInfo student = new UrpStudentInfo();
         student.setAccount(Integer.parseInt(account));
@@ -463,7 +570,7 @@ public class NewUrpSpider {
         return student;
     }
 
-    public List<SearchResult<ClassInfoSearchResult>> getClassInfoSearchResult(SearchClassInfoPost searchClassInfoPost){
+    public List<SearchResult<ClassInfoSearchResult>> getClassInfoSearchResult(SearchClassInfoPost searchClassInfoPost) {
         FormBody.Builder params = new FormBody.Builder();
         FormBody body = params.add("param_value", searchClassInfoPost.getParamValue())
                 .add("executiveEducationPlanNum", searchClassInfoPost.getExecutiveEducationPlanNum())
@@ -479,15 +586,17 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .post(body)
                 .build();
-        String result = new String(execute(request));
-        TypeReference<List<SearchResult<ClassInfoSearchResult>>> reference = new TypeReference<List<SearchResult<ClassInfoSearchResult>>>(){};
+        String result = getContent(request);
+        TypeReference<List<SearchResult<ClassInfoSearchResult>>> reference = new TypeReference<List<SearchResult<ClassInfoSearchResult>>>() {
+        };
 
         return parseObject(result, reference);
     }
 
     /**
      * 通过教务网的班级号查询班级课表
-     * @param classCode
+     *
+     * @param classCode 教务网的班级号
      */
     public List<List<CourseTimetableSearchResult>> getUrpCourseTimeTableByClassCode(String classCode) {
 
@@ -496,7 +605,7 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .get()
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
 
         return parseObject(result, classCourseSearchResultReference);
 
@@ -504,6 +613,7 @@ public class NewUrpSpider {
 
     /**
      * 通过教务网的班级号查询班级课表
+     *
      * @param urpClassroom
      */
     public List<List<CourseTimetableSearchResult>> getUrpCourseTimeTableByClassroomNum(UrpClassroom urpClassroom) {
@@ -515,7 +625,7 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .get()
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
 
         return parseObject(result, classCourseSearchResultReference);
 
@@ -523,6 +633,7 @@ public class NewUrpSpider {
 
     /**
      * 通过教务网的课程号查询班级课表
+     *
      * @param course
      */
     public List<List<CourseTimetableSearchResult>> getUrpCourseTimeTableByCourse(Course course) {
@@ -534,7 +645,7 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .get()
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
 
         return parseObject(result, classCourseSearchResultReference);
 
@@ -542,6 +653,7 @@ public class NewUrpSpider {
 
     /**
      * 通过教务网的教师号查询教师课表
+     *
      * @param teacherNumber
      */
     public List<List<CourseTimetableSearchResult>> getUrpCourseTimeTableByTeacherAccount(String teacherNumber) {
@@ -551,7 +663,7 @@ public class NewUrpSpider {
                 .headers(HEADERS)
                 .get()
                 .build();
-        String result = new String(execute(request));
+        String result = getContent(request);
 
         return parseObject(result, classCourseSearchResultReference);
 
@@ -559,10 +671,11 @@ public class NewUrpSpider {
 
     /**
      * 教师信息列表
+     *
      * @param searchTeacherPost
      * @return
      */
-    public List<SearchResult<SearchTeacherResult>> searchTeacherInfo(SearchTeacherPost searchTeacherPost){
+    public List<SearchResult<SearchTeacherResult>> searchTeacherInfo(SearchTeacherPost searchTeacherPost) {
         FormBody.Builder params = new FormBody.Builder();
         FormBody body = params
                 .add("executiveEducationPlanNumber", searchTeacherPost.getExecutiveEducationPlanNum())
@@ -578,15 +691,17 @@ public class NewUrpSpider {
                 .post(body)
                 .build();
 
-        TypeReference<List<SearchResult<SearchTeacherResult>>> reference = new TypeReference<List<SearchResult<SearchTeacherResult>>>(){};
-        return parseObject(new String(execute(request)) ,reference);
+        TypeReference<List<SearchResult<SearchTeacherResult>>> reference = new TypeReference<List<SearchResult<SearchTeacherResult>>>() {
+        };
+        return parseObject(getContent(request), reference);
     }
 
     /**
      * 查询教室信息
+     *
      * @return
      */
-    public List<SearchResultWrapper<SearchClassroomResult>> searchClassroomInfo(SearchClassroomPost searchClassroomPost){
+    public List<SearchResultWrapper<SearchClassroomResult>> searchClassroomInfo(SearchClassroomPost searchClassroomPost) {
         FormBody.Builder params = new FormBody.Builder();
         FormBody body = params
                 .add("executiveEducationPlanNumber", searchClassroomPost.getExecutiveEducationPlanNum())
@@ -603,15 +718,17 @@ public class NewUrpSpider {
                 .post(body)
                 .build();
 
-        TypeReference<List<SearchResultWrapper<SearchClassroomResult>>> reference = new TypeReference<List<SearchResultWrapper<SearchClassroomResult>>>(){};
-        return parseObject(new String(execute(request)) ,reference);
+        TypeReference<List<SearchResultWrapper<SearchClassroomResult>>> reference = new TypeReference<List<SearchResultWrapper<SearchClassroomResult>>>() {
+        };
+        return parseObject(getContent(request), reference);
     }
 
     /**
      * 查询课程信息
+     *
      * @param searchCoursePost
      */
-    public SearchResult<SearchCourseResult> searchCourseInfo(SearchCoursePost searchCoursePost){
+    public SearchResult<SearchCourseResult> searchCourseInfo(SearchCoursePost searchCoursePost) {
         FormBody.Builder params = new FormBody.Builder();
         FormBody body = params
                 .add("zxjxjhh", searchCoursePost.getExecutiveEducationPlanNum())
@@ -632,38 +749,112 @@ public class NewUrpSpider {
 
         TypeReference<SearchResult<SearchCourseResult>> typeReference = new TypeReference<SearchResult<SearchCourseResult>>() {
         };
-        return parseObject(new String(execute(request)) ,typeReference);
+        return parseObject(getContent(request), typeReference);
+    }
+
+    /**
+     * 查询课程信息
+     *
+     * @param searchCoursePost
+     */
+    public SearchResultDateWrapper<SearchCourseResult> searchCourseBasicInfo(SearchCoursePost searchCoursePost) {
+        FormBody.Builder params = new FormBody.Builder();
+        FormBody body = params
+                .add("kkxsh", searchCoursePost.getAcademyCode())
+                .add("kcm", searchCoursePost.getCourseName())
+                .add("kch", searchCoursePost.getCourseNumber())
+                .add("pageSize", searchCoursePost.getPageSize())
+                .add("pageNum", searchCoursePost.getPageNum())
+                .build();
+
+        Request request = new Request.Builder()
+                .url(COURSE_BASIC_INFO)
+                .headers(HEADERS)
+                .post(body)
+                .build();
+
+        TypeReference<SearchResultDateWrapper<SearchCourseResult>> typeReference =
+                new TypeReference<SearchResultDateWrapper<SearchCourseResult>>() {
+                };
+        return parseObject(getContent(request), typeReference);
+    }
+
+    public TeachingEvaluation searchTeachingEvaluationInfo() {
+        Request request = new Request.Builder()
+                .url(Teaching_Evaluation)
+                .headers(HEADERS)
+                .build();
+
+        return parseObject(getContent(request), TeachingEvaluation.class);
     }
 
 
-    private <T> T parseObject(String text, TypeReference<T> type){
+    public String getEvaluationToken(EvaluationPagePost evaluationPagePost) {
+        FormBody.Builder params = new FormBody.Builder();
+        FormBody body = params
+                .add("evaluatedPeople", evaluationPagePost.getEvaluatedPeople())
+                .add("evaluatedPeopleNumber", evaluationPagePost.getEvaluatedPeopleNumber())
+                .add("questionnaireCode", evaluationPagePost.getQuestionnaireCode())
+                .add("questionnaireName", evaluationPagePost.getQuestionnaireName())
+                .add("evaluationContentNumber", evaluationPagePost.getEvaluationContentNumber())
+                .add("evaluationContentContent", evaluationPagePost.getEvaluationContentContent())
+                .build();
+
+        Request request = new Request.Builder()
+                .url(EVALUATION_PAGE)
+                .headers(HEADERS)
+                .post(body)
+                .build();
+
+        String s = getContent(request);
+
+        Document document = Jsoup.parse(s);
+        Element element = document.getElementById("tokenValue");
+
+        return element.attr("value");
+    }
+
+
+    public void evaluation(EvaluationPost evaluationPost) {
+        FormBody.Builder params = new FormBody.Builder();
+        FormBody body = params
+                .add("0000000050", evaluationPost.getFirst())
+                .add("0000000051", evaluationPost.getSecond())
+                .add("0000000052", evaluationPost.getThird())
+                .add("0000000053", evaluationPost.getFourth())
+                .add("zgpj", evaluationPost.getComment())
+                .add("questionnaireCode", evaluationPost.getQuestionnaireCode())
+                .add("evaluationContentNumber", evaluationPost.getEvaluationContentNumber())
+                .add("evaluatedPeopleNumber", evaluationPost.getEvaluatedPeopleNumber())
+                .add("tokenValue", evaluationPost.getTokenValue())
+                .add("count", evaluationPost.getCount())
+                .build();
+
+        Request request = new Request.Builder()
+                .url(EVALUATION)
+                .headers(HEADERS)
+                .post(body)
+                .build();
+        String s = getContent(request);
+
+
+    }
+
+
+    private <T> T parseObject(String text, TypeReference<T> type) {
         try {
             return JSON.parseObject(text, type);
-        }catch (JSONException e) {
-
-            if (text.length() > 1000) {
-                log.error("parse courseTimeTable error {}", text, e);
-                throw new UrpEvaluationException("account: " + account + " 未完成评估无法查成绩");
-            }
-            COOKIE_JAR.clearSession();
-            if(!(text.contains("login") || text.contains("invalidSession"))){
-                log.error("parse courseTimeTable error {}", text, e);
-            }
-            throw new UrpSessionExpiredException("account: " + account + " session expired");
-
+        } catch (JSONException e) {
+            throw new UrpException("json 解析异常", e);
         }
 
     }
 
-    private <T> T parseObject(String text, Class<T> clazz){
+    private <T> T parseObject(String text, Class<T> clazz) {
         try {
             return JSON.parseObject(text, clazz);
-        }catch (JSONException e) {
-            if(!text.contains("login")){
-                log.error("parse courseTimeTable error {}", text, e);
-            }
-            COOKIE_JAR.clearSession();
-            throw new UrpSessionExpiredException("account: " + account + " session expired");
+        } catch (JSONException e) {
+            throw new UrpException("json 解析异常", e);
         }
 
     }
@@ -672,6 +863,7 @@ public class NewUrpSpider {
      * 解析学生信息页面的html
      */
     private Map<String, String> parseUserInfo(String html) {
+
         HashMap<String, String> infoMap = new HashMap<>();
         Document document = Jsoup.parse(html);
         Elements elements = document.getElementsByClass("profile-info-row");
@@ -680,7 +872,6 @@ public class NewUrpSpider {
             List<Element> nameList = Lists.newArrayList(name.iterator());
             Elements value = e.getElementsByClass("profile-info-value");
             List<Element> valueList = Lists.newArrayList(value.iterator());
-
 
             for (int x = 0; x < nameList.size(); x++) {
                 infoMap.put(nameList.get(x).text(), valueList.get(x).text());
@@ -694,10 +885,10 @@ public class NewUrpSpider {
     private static byte[] execute(Request request) {
         try (Response response = CLIENT.newCall(request).execute()) {
             if (isResponseFail(response)) {
-                throw new UrpRequestException(request.url().toString(), response.code(),  response.message());
+                throw new UrpRequestException(request.url().toString(), response.code(), response.message());
             }
             ResponseBody body = response.body();
-            if(body == null){
+            if (body == null) {
                 throw new UrpRequestException(request.url().toString(), response.code(),
                         "cause: response body is null");
             }
@@ -708,10 +899,22 @@ public class NewUrpSpider {
     }
 
 
+    private static String getContent(Request request) {
+        String content = new String(execute(request));
+        if (content.contains("invalidSession") || content.contains("login")) {
+            COOKIE_JAR.clearSession();
+            throw new UrpSessionExpiredException("session expired");
+        } else if (content.contains("没有完成评估")) {
+            throw new UrpEvaluationException("评估未完成无法查看个人信息");
+        }
+        return content;
+    }
+
+
     private Response getResponse(Request request) {
         try (Response response = CLIENT.newCall(request).execute()) {
             if (isResponseFail(response)) {
-                throw new UrpRequestException(request.url().toString(), response.code(),  response.message());
+                throw new UrpRequestException(request.url().toString(), response.code(), response.message());
             }
             return response;
         } catch (IOException e) {
@@ -739,15 +942,17 @@ public class NewUrpSpider {
     }
 
 
-    private static class CaptchaProducer implements Runnable{
+    private static class CaptchaProducer implements Runnable {
 
         @Override
         public void run() {
-            while (!Thread.interrupted()){
+            while (!Thread.interrupted()) {
                 log.debug("produce captcha thread start");
-                UUID uuid = UUID.randomUUID();
-                MDC.put("preLoad", uuid.toString());
+
                 try {
+
+                    UUID uuid = UUID.randomUUID();
+                    MDC.put("preLoad", uuid.toString());
                     VerifyCode captcha = getCaptcha();
                     PreLoadCaptcha preLoadCaptcha = new PreLoadCaptcha(captcha, uuid.toString(), new Date());
                     queue.put(preLoadCaptcha);
@@ -762,11 +967,11 @@ public class NewUrpSpider {
         }
     }
 
-    private static class CaptchaCleaner implements Runnable{
+    private static class CaptchaCleaner implements Runnable {
 
         @Override
         public void run() {
-            while (!Thread.interrupted()){
+            while (!Thread.interrupted()) {
                 try {
                     Thread.sleep(1000 * 60 * 20);
                 } catch (Throwable e) {
@@ -779,18 +984,18 @@ public class NewUrpSpider {
     }
 
     @Data
-    private static class PreLoadCaptcha{
+    private static class PreLoadCaptcha {
         private VerifyCode captcha;
         private String preloadCookieId;
         private Date createDate;
 
-        PreLoadCaptcha(VerifyCode captcha, String preloadCookieId, Date createDate){
+        PreLoadCaptcha(VerifyCode captcha, String preloadCookieId, Date createDate) {
             this.captcha = captcha;
             this.preloadCookieId = preloadCookieId;
             this.createDate = createDate;
         }
 
-        boolean isExpire(){
+        boolean isExpire() {
             return System.currentTimeMillis() - createDate.getTime() > 1000 * 60 * 20;
         }
     }

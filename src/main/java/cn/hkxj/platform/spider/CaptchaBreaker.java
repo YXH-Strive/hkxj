@@ -42,7 +42,6 @@ class CaptchaBreaker {
 
             Response response = client.newCall(request).execute();
 
-
             Result result = JSON.parseObject(response.body().byteStream(), Result.class);
             if(result.status == 200){
                 return result.getData();
@@ -55,7 +54,7 @@ class CaptchaBreaker {
             throw new RuntimeException(e);
         }finally {
             long end = System.currentTimeMillis();
-            log.info("get code in {}", end-strat);
+            log.debug("get code in {}", end-strat);
         }
 
 

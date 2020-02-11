@@ -1,124 +1,106 @@
 package cn.hkxj.platform.pojo;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
+import cn.hkxj.platform.utils.DateUtils;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.Accessors;
 
 import java.util.Date;
 
+@Data
+@Accessors(chain = true)
 public class Grade {
+    @EqualsAndHashCode.Exclude
     private Integer id;
+
+    @EqualsAndHashCode.Exclude
+    private Integer examId = 0;
 
     private Integer account;
 
-    private String courseId;
+    private Double score;
 
-    private Integer year;
+    private Double credit;
 
-    private Byte term;
+    @EqualsAndHashCode.Exclude
+    private Double gradePoint;
 
-    private Integer score;
+    private String levelName;
 
-    private Integer point;
+    private String levelPoint;
 
+    @EqualsAndHashCode.Exclude
+    private Integer rank;
+
+    private String courseName;
+
+    private String courseNumber;
+
+    private String courseOrder;
+
+    private String coursePropertyCode;
+
+    private String coursePropertyName;
+
+    private String examTypeCode;
+
+    private String examTypeName;
+
+    private Integer studyHour;
+
+    private String operateTime;
+
+    private String operator;
+
+    private String examTime;
+
+    private String unpassedReasonCode;
+
+    private String unpassedReasonExplain;
+
+    private String remark;
+
+    private String replaceCourseNumber;
+
+    private String retakeCourseMark;
+
+    private String retakecourseModeCode;
+
+    private String retakeCourseModeExplain;
+
+    private String standardPoint;
+
+    private String termYear;
+
+    private Integer termOrder;
+
+    @EqualsAndHashCode.Exclude
     private Date gmtCreate;
+    @EqualsAndHashCode.Exclude
+    private Date gmtModify;
 
-    public Integer getId() {
-        return id;
+    private boolean update = false;
+
+
+    public Grade setGradePoint(Double gradePoint) {
+        if (gradePoint == 0 && this.score != -1) {
+            double v = this.getScore() - 60;
+            if (v < 0) {
+                this.gradePoint = 0.0;
+            } else {
+                this.gradePoint = 1 + v / 10;
+            }
+
+        }else {
+            this.gradePoint = gradePoint;
+        }
+        return this;
     }
 
-    public void setId(Integer id) {
-        this.id = id;
+    public boolean isCurrentTermGrade() {
+        Term term = DateUtils.getCurrentSchoolTime().getTerm();
+        return this.getTermYear().equals(term.getTermYear()) && this.getTermOrder().equals(term.getOrder());
+
     }
 
-    public Integer getAccount() {
-        return account;
-    }
-
-    public void setAccount(Integer account) {
-        this.account = account;
-    }
-
-    public String getCourseId() {
-        return courseId;
-    }
-
-    public void setCourseId(String courseId) {
-        this.courseId = courseId == null ? null : courseId.trim();
-    }
-
-    public Integer getYear() {
-        return year;
-    }
-
-    public void setYear(Integer year) {
-        this.year = year;
-    }
-
-    public Byte getTerm() {
-        return term;
-    }
-
-    public void setTerm(Byte term) {
-        this.term = term;
-    }
-
-    public Integer getScore() {
-        return score;
-    }
-
-    public void setScore(Integer score) {
-        this.score = score;
-    }
-
-    public Integer getPoint() {
-        return point;
-    }
-
-    public void setPoint(Integer point) {
-        this.point = point;
-    }
-
-    public Date getGmtCreate() {
-        return gmtCreate;
-    }
-
-    public void setGmtCreate(Date gmtCreate) {
-        this.gmtCreate = gmtCreate;
-    }
-
-
-	@Override
-	public String toString() {
-		return MoreObjects.toStringHelper(this)
-				.add("id", id)
-				.add("account", account)
-				.add("courseId", courseId)
-				.add("year", year)
-				.add("term", term)
-				.add("score", score)
-				.add("point", point)
-				.add("gmtCreate", gmtCreate)
-				.toString();
-	}
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        Grade that = (Grade) o;
-
-        return Objects.equal(this.account, that.account) &&
-                Objects.equal(this.year, that.year) &&
-                Objects.equal(this.courseId, that.courseId) &&
-                Objects.equal(this.term, that.term) &&
-                Objects.equal(this.score, that.score) &&
-                Objects.equal(this.point, that.point);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(account, year, term, score,
-                point, courseId);
-    }
 }
