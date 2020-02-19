@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.hkxj.platform.mapper.ext.CourseTimetableExtMapper">
+
+    <select id="selectByStudentRelative" resultMap="cn.hkxj.platform.mapper.CourseTimetableMapper.BaseResultMap"
+            parameterType="cn.hkxj.platform.pojo.StudentCourseTimeTable">
+        select
+        course_timetable.id,
+        room_name,
+        room_number,
+        campus_name,
+        continuing_session,
+        course_id,
+        attend_class_teacher,
+        student_count,
+        class_day,
+        class_order,
+        start_week,
+        end_week,
+        class_in_school_week,
+        course_sequence_number,
+        week_description,
+        class_distinct,
+        course_timetable.term_year,
+        course_timetable.term_order,
+        gmt_create
+        from student_course_time_table
+
+        join course_timetable on student_course_time_table.course_timetable_id = course_timetable.id
+        <where>
+            <if test="studentId != null">
+                and student_id = #{studentId}
+            </if>
+            <if test="termYear != null">
+                and student_course_time_table.term_year = #{termYear}
+            </if>
+            <if test="termOrder != null">
+                and student_course_time_table.term_order = #{termOrder}
+            </if>
+        </where>
+
+    </select>
+    <select id="selectByClassRelative" resultMap="cn.hkxj.platform.mapper.CourseTimetableMapper.BaseResultMap"
+            parameterType="cn.hkxj.platform.pojo.ClassCourseTimetable">
+        select
+        course_timetable.id,
+        room_name,
+        room_number,
+        campus_name,
+        continuing_session,
+        course_id,
+        attend_class_teacher,
+        student_count,
+        class_day,
+        class_order,
+        start_week,
+        end_week,
+        class_in_school_week,
+        course_sequence_number,
+        week_description,
+        class_distinct,
+        course_timetable.term_year,
+        course_timetable.term_order,
+        gmt_create
+        from class_course_timetable
+
+        join course_timetable on class_course_timetable.course_timetable_id = course_timetable.id
+        <where>
+            <if test="classId != null">
+                and class_id = #{classId}
+            </if>
+            <if test="termYear != null">
+                and class_course_timetable.term_year = #{termYear}
+            </if>
+            <if test="termOrder != null">
+                and class_course_timetable.term_order = #{termOrder}
+            </if>
+        </where>
+
+    </select>
+</mapper>

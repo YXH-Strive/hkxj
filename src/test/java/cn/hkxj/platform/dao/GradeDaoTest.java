@@ -9,10 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import javax.annotation.Resource;
-
 import java.util.List;
-
-import static org.junit.Assert.*;
 
 @Slf4j
 @RunWith(SpringRunner.class)
@@ -41,7 +38,7 @@ public class GradeDaoTest {
 
     @Test
     public void getGradeByAccount() {
-        List<Grade> account = gradeDao.getGradeByAccount(2016023344);
+        List<Grade> account = gradeDao.getGradeByAccount(2018022512);
         System.out.println(account.size());
         for (Grade grade : account) {
             System.out.println(grade);

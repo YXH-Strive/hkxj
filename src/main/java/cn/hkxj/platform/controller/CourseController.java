@@ -4,7 +4,6 @@ import cn.hkxj.platform.elasticsearch.CourseTimeTableSearchService;
 import cn.hkxj.platform.elasticsearch.document.CourseTimeTableDocument;
 import cn.hkxj.platform.pojo.WebResponse;
 import cn.hkxj.platform.pojo.constant.ErrorCode;
-import cn.hkxj.platform.pojo.dto.CourseTimeTableDetailDto;
 import cn.hkxj.platform.pojo.vo.CourseTimeTableVo;
 import cn.hkxj.platform.service.CourseTimeTableService;
 import lombok.extern.slf4j.Slf4j;
@@ -38,24 +37,6 @@ public class CourseController {
     private static final int ACCOUNT_LENGTH = 10;
     private static final String ACCOUNT_PREFIX = "201";
 
-    @GetMapping("/timetable")
-    public WebResponse getTimeTable(@RequestParam(value = "account", required = false) String account) {
-
-        if (Objects.isNull(account)) {
-            account = (String) httpSession.getAttribute("account");
-        }
-
-        if (Objects.isNull(account)) {
-            return WebResponse.fail(ErrorCode.USER_UNAUTHORIZED.getErrorCode(), "用户未绑定");
-        }
-
-        if (!isAccountValid(account)) {
-            return WebResponse.fail(ErrorCode.ACCOUNT_OR_PASSWORD_INVALID.getErrorCode(), "账号无效");
-        }
-
-        List<CourseTimeTableDetailDto> details = courseTimeTableService.getAllCourseTimeTableDetailDtos(Integer.parseInt(account));
-        return WebResponse.success(details);
-    }
 
     @GetMapping("/timetableV2")
     public WebResponse getTimeTableV2(@RequestParam(value = "account", required = false) String account) {
@@ -68,7 +49,7 @@ public class CourseController {
             return WebResponse.fail(ErrorCode.ACCOUNT_OR_PASSWORD_INVALID.getErrorCode(), "账号无效");
         }
 
-        List<CourseTimeTableVo> courseTimeTableVoList = courseTimeTableService.getCourseTimeTableByStudent(Integer.parseInt(account));
+        List<CourseTimeTableVo> courseTimeTableVoList = courseTimeTableService.getCurrentTermCourseTimeTableByStudent(Integer.parseInt(account));
         return WebResponse.success(courseTimeTableVoList);
     }
 

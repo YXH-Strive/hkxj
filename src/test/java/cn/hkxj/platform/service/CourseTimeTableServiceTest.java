@@ -4,11 +4,11 @@ import cn.hkxj.platform.PlatformApplication;
 import cn.hkxj.platform.dao.CourseTimeTableDao;
 import cn.hkxj.platform.dao.StudentDao;
 import cn.hkxj.platform.dao.UrpClassRoomDao;
-import cn.hkxj.platform.pojo.*;
-import cn.hkxj.platform.pojo.dto.CourseTimeTableDetailDto;
+import cn.hkxj.platform.pojo.CourseTimetable;
+import cn.hkxj.platform.pojo.Student;
+import cn.hkxj.platform.pojo.UrpClassroom;
 import cn.hkxj.platform.pojo.vo.CourseTimeTableVo;
 import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTableForSpider;
-import cn.hkxj.platform.utils.DateUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -18,9 +18,6 @@ import org.springframework.test.context.web.WebAppConfiguration;
 
 import javax.annotation.Resource;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * @author Yuki
@@ -41,28 +38,11 @@ public class CourseTimeTableServiceTest {
     @Resource
     private UrpClassRoomDao urpClassRoomDao;
 
-    @Test
-    public void getAllCourseTimeTableDetails() {
-        Student student = studentDao.selectStudentByAccount(2017025299);
-        List<CourseTimeTableDetail> details = courseTimeTableService.getAllCourseTimeTableDetails(student);
-        for (CourseTimeTableDetail detail : details) {
-            System.out.println(detail);
-        }
-
-    }
-
-    @Test
-    public void getAllCourseTimeTableDetailDtos() {
-
-        for (CourseTimeTableDetailDto dto : courseTimeTableService.getAllCourseTimeTableDetailDtos(2017025717)) {
-            System.out.println(dto);
-        }
-    }
 
     @Test
     public void getCourseTimeTableByStudent() {
-        Student student = studentDao.selectStudentByAccount(2017025717);
-        for (CourseTimeTableVo courseTimeTableVo : courseTimeTableService.getCourseTimeTableByStudent(student)) {
+        Student student = studentDao.selectStudentByAccount(2017021881);
+        for (CourseTimeTableVo courseTimeTableVo : courseTimeTableService.getCurrentTermCourseTimeTableByStudent(student)) {
             System.out.println(courseTimeTableVo);
         }
 
@@ -88,35 +68,6 @@ public class CourseTimeTableServiceTest {
     }
 
 
-    @Test
-    public void task() throws InterruptedException {
-        ExecutorService service = Executors.newFixedThreadPool(9);
-        List<Student> studentList = studentDao.selectAllStudent();
-        CountDownLatch latch = new CountDownLatch(studentList.size());
-        for (Student student : studentList) {
-            if (student.getIsCorrect()) {
-                service.submit(() -> {
-                    try {
-                        if (student.getIsCorrect()) {
-                            long start = System.currentTimeMillis();
-                            courseTimeTableService.getAllCourseTimeTableDetails(student);
-                            System.out.println(student.getAccount() + "  spend" + (System.currentTimeMillis() - start));
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-            }
-
-        }
-        latch.await();
-        System.out.println("finish");
-        Thread.sleep(2000L);
-
-
-    }
 
     @Test
     public void getCourseTimeTableByStudentFromSpider() {
@@ -129,7 +80,7 @@ public class CourseTimeTableServiceTest {
 
     @Test
     public void testUpdate() {
-        for (CourseTimeTableVo vo : courseTimeTableService.getCourseTimeTableByStudent(2017023437)) {
+        for (CourseTimeTableVo vo : courseTimeTableService.getCurrentTermCourseTimeTableByStudent(2017023437)) {
             System.out.println(vo);
         }
 
@@ -150,6 +101,13 @@ public class CourseTimeTableServiceTest {
         List<CourseTimetable> list = courseTimeTableService.getCourseTimetableList(details);
         courseTimeTableService.getCourseTimetableIdList(list);
 
+    }
+
+    @Test
+    public void getCurrentTermCourseTimetableByClass() {
+        // 按学生分好组，然后再进行抓取
+        List<CourseTimetable> timetable = courseTimeTableService.getCurrentTermCourseTimetableByClass("2017040012");
+        System.out.println(timetable.size());
     }
 
 

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="cn.hkxj.platform.mapper.ext.GradeExtMapper">
+
+    <insert id="insertBatch" parameterType="java.util.List">
+        insert ignore into grade
+        (id, exam_id, account, score, credit, grade_point, level_name, level_point, rank,
+        course_name, course_number, course_order, course_property_code, course_property_name,
+        exam_type_code, exam_type_name, study_hour, operate_time, operator, exam_time, unpassed_reason_code,
+        unpassed_reason_explain, remark, replace_course_number, retake_course_mark, retakeCourse_mode_code,
+        retake_course_mode_explain, standard_point, term_year, term_order)
+        VALUES
+        <foreach collection="list" item="item" index="index" separator=",">
+            (
+            #{item.id,jdbcType=INTEGER},
+            #{item.examId,jdbcType=INTEGER},
+            #{item.account,jdbcType=INTEGER},
+            #{item.score,jdbcType=DOUBLE},
+            #{item.credit,jdbcType=DOUBLE},
+            #{item.gradePoint,jdbcType=DOUBLE},
+            #{item.levelName,jdbcType=VARCHAR},
+            #{item.levelPoint,jdbcType=VARCHAR},
+            #{item.rank,jdbcType=INTEGER},
+            #{item.courseName,jdbcType=VARCHAR},
+            #{item.courseNumber,jdbcType=VARCHAR},
+            #{item.courseOrder,jdbcType=VARCHAR},
+            #{item.coursePropertyCode,jdbcType=VARCHAR},
+            #{item.coursePropertyName,jdbcType=VARCHAR},
+            #{item.examTypeCode,jdbcType=VARCHAR},
+            #{item.examTypeName,jdbcType=VARCHAR},
+            #{item.studyHour,jdbcType=INTEGER},
+            #{item.operateTime,jdbcType=VARCHAR},
+            #{item.operator,jdbcType=VARCHAR},
+            #{item.examTime,jdbcType=VARCHAR},
+            #{item.unpassedReasonCode,jdbcType=VARCHAR},
+            #{item.unpassedReasonExplain,jdbcType=VARCHAR},
+            #{item.remark,jdbcType=VARCHAR},
+            #{item.replaceCourseNumber,jdbcType=VARCHAR},
+            #{item.retakeCourseMark,jdbcType=VARCHAR},
+            #{item.retakecourseModeCode,jdbcType=VARCHAR},
+            #{item.retakeCourseModeExplain,jdbcType=VARCHAR},
+            #{item.standardPoint,jdbcType=VARCHAR},
+            #{item.termYear,jdbcType=VARCHAR},
+            #{item.termOrder,jdbcType=INTEGER}
+            )
+        </foreach>
+
+    </insert>
+
+</mapper>

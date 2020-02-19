@@ -1,7 +1,6 @@
 package cn.hkxj.platform.controller.wechat;
 
 import cn.hkxj.platform.config.wechat.WechatMpConfiguration;
-import cn.hkxj.platform.pojo.CourseTimeTableDetail;
 import cn.hkxj.platform.pojo.Student;
 import cn.hkxj.platform.pojo.constant.SubscribeScene;
 import cn.hkxj.platform.pojo.wechat.OneOffSubscription;
@@ -19,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -100,12 +98,11 @@ public class WxSubscriptionController {
 
     private void processCourseSubscription(WxMpService wxMpService, String openid, String scene, Student student) {
         //判断场景值来决定更具体的处理
+        // TODO 适配新的代码
         if (Objects.equals(SubscribeScene.COURSE_PUSH.getScene(), scene)) {
             //场景为1005时
-            List<CourseTimeTableDetail> detailList = courseTimeTableService.getDetailsForCurrentDay(student);
-            String messageContent = courseTimeTableService.convertToText(detailList);
             //发送一条客服消息
-            sendTemplateMessage(wxMpService, openid, scene, messageContent);
+//            sendTemplateMessage(wxMpService, openid, scene, messageContent);
         }
     }
 

@@ -2,18 +2,15 @@ package cn.hkxj.platform.service;
 
 import cn.hkxj.platform.MDCThreadPool;
 import cn.hkxj.platform.dao.*;
-import cn.hkxj.platform.exceptions.RoomParseException;
 import cn.hkxj.platform.exceptions.UrpRequestException;
 import cn.hkxj.platform.pojo.*;
-import cn.hkxj.platform.pojo.dto.CourseTimeTableDetailDto;
 import cn.hkxj.platform.pojo.vo.CourseTimeTableVo;
-import cn.hkxj.platform.spider.newmodel.coursetimetable.TimeAndPlace;
 import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTable;
 import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTableForSpider;
 import cn.hkxj.platform.utils.DateUtils;
 import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -32,38 +29,20 @@ import java.util.stream.Collectors;
 public class CourseTimeTableService {
 
     private static final String NO_COURSE_TEXT = "今天没有课呐，可以出去浪了~\n";
-
-    private static ThreadFactory courseTimeTableThreadFactory = new ThreadFactoryBuilder().setNameFormat("courseTimeTable-pool").build();
-    private static ExecutorService saveDbPool = new ThreadPoolExecutor(1, 1,
-            0L, TimeUnit.MILLISECONDS,
-            new LinkedBlockingQueue<>(), courseTimeTableThreadFactory);
-
     @Resource
     private RoomService roomService;
-    @Resource
-    private RoomDao roomDao;
-    @Resource
-    private PlanDao planDao;
     @Resource
     private StudentDao studentDao;
     @Resource
     private UrpCourseService urpCourseService;
     @Resource
-    private CourseTimeTableDetailDao courseTimeTableDetailDao;
-    @Resource
-    private CourseTimeTableBasicInfoDao courseTimeTableBasicInfoDao;
-    @Resource
     private NewUrpSpiderService newUrpSpiderService;
     @Resource
     private ClassService classService;
     @Resource
-    private ClassCourseTimetableDao classCourseTimetableDao;
-    @Resource
     private CourseTimeTableDao courseTimeTableDao;
     @Resource
     private StudentCourseTimeTableDao studentCourseTimeTableDao;
-    @Resource
-    private UrpClassRoomDao urpClassRoomDao;
     @Resource
     private TeacherCourseTimeTableDao teacherCourseTimeTableDao;
     @Resource
@@ -96,7 +75,7 @@ public class CourseTimeTableService {
             builder.append(computationOfKnots(detail)).append("节").append("\n")
                     .append(urpCourseService.getCurrentTermCourse(detail.getCourseId(),
                             detail.getCourseSequenceNumber()).getName()).append(
-                            "\n")
+                    "\n")
                     .append(detail.getRoomName());
             if (count != length) {
                 builder.append("\n\n");
@@ -105,64 +84,26 @@ public class CourseTimeTableService {
         return builder.toString();
     }
 
-    public List<CourseTimeTableDetailDto> getAllCourseTimeTableDetailDtos(int account) {
-        Student student = studentDao.selectStudentByAccount(account);
-        List<CourseTimeTableDetail> details = getAllCourseTimeTableDetails(student);
-        return assembleCourseTimeTableDto(details);
-    }
-
-    public List<CourseTimeTableDetailDto> getAppointSectionCourseTimeTableDetailDto(int account, int section) {
-        Student student = studentDao.selectStudentByAccount(account);
-        List<CourseTimeTableDetail> details = getDetailsForSection(student, section);
-        return assembleCourseTimeTableDto(details);
-    }
-
-    /**
-     * 获取当前学期所有的课程时间表
-     *
-     * @param student 学生实体
-     * @return 课程时间表详情
-     */
-    public List<CourseTimeTableDetail> getAllCourseTimeTableDetails(Student student) {
-        SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
-        List<Integer> detailIdList = getCourseTimeTableDetailIdByAccount(student.getAccount());
-        if (detailIdList.isEmpty()) {
-            try {
-                CompletableFuture<UrpCourseTimeTableForSpider> future =
-                        CompletableFuture.supplyAsync(() -> getCourseTimeTableDetails(student), courseSpiderExecutor);
-                UrpCourseTimeTableForSpider tableForSpider = future.get(1000L, TimeUnit.MILLISECONDS);
-                if (!hasSchoolCourse(tableForSpider)) {
-                    return getCourseTimetableByClass(student);
-                }
-                return getCurrentTermDataFromSpider(tableForSpider, schoolTime);
-            } catch (UrpRequestException | InterruptedException | ExecutionException | TimeoutException e) {
-                return getCourseTimetableByClass(student);
-            }
-
-        } else {
-            return courseTimeTableDetailDao.getCourseTimeTableDetailForCurrentTerm(detailIdList, schoolTime);
-        }
-    }
-
 
     public List<CourseTimeTableVo> updateCourseTimeTableByStudent(int account) {
         studentCourseTimeTableDao.deleteByAccount(account);
-        return getCourseTimeTableByStudent(account);
+        return getCurrentTermCourseTimeTableByStudent(account);
     }
 
 
-    public List<CourseTimeTableVo> getCourseTimeTableByStudent(int account) {
+    public List<CourseTimeTableVo> getCurrentTermCourseTimeTableByStudent(int account) {
         Student student = studentDao.selectStudentByAccount(account);
-        return getCourseTimeTableByStudent(student);
+        return getCurrentTermCourseTimeTableByStudent(student);
     }
 
 
-    public List<CourseTimeTableVo> getCourseTimeTableByStudent(Student student) {
-        List<Integer> idList = getCourseTimeTableIdByAccount(student.getAccount());
-        if (idList.isEmpty()) {
+    public List<CourseTimeTableVo> getCurrentTermCourseTimeTableByStudent(Student student) {
+        // TODO 优化这部分逻辑
+        List<CourseTimetable> courseTimetableList = getCurrentTermCourseTimeTableByAccount(student.getAccount());
+        if (courseTimetableList.isEmpty()) {
             return getCourseTimeTableByStudentFromSpider(student);
         } else {
-            return transCourseTimeTableToVo(courseTimeTableDao.selectByIdList(idList));
+            return transCourseTimeTableToVo(courseTimetableList);
         }
     }
 
@@ -173,7 +114,7 @@ public class CourseTimeTableService {
 
             UrpCourseTimeTableForSpider tableForSpider = future.get(3000L, TimeUnit.MILLISECONDS);
             if (!hasSchoolCourse(tableForSpider)) {
-                return transCourseTimeTableToVo(getCourseTimetableByClazz(student));
+                return getCurrentTermCourseTimetableVOByClazz(student);
             } else {
                 List<CourseTimetable> list = getCourseTimetableList(tableForSpider);
                 saveCourseTimeTableDetailsFromSearch(list, student);
@@ -181,7 +122,7 @@ public class CourseTimeTableService {
             }
 
         } catch (UrpRequestException | InterruptedException | ExecutionException | TimeoutException e) {
-            return transCourseTimeTableToVo(getCourseTimetableByClazz(student));
+            return getCurrentTermCourseTimetableVOByClazz(student);
         }
     }
 
@@ -192,7 +133,7 @@ public class CourseTimeTableService {
 
     public List<CourseTimeTableVo> getCourseTimetableVoByClazz(String classNum) {
         UrpClass urpClass = urpClassDao.selectByClassNumber(classNum);
-        return transCourseTimeTableToVo(getCourseTimetableByClazz(urpClass));
+        return transCourseTimeTableToVo(getCurrentTermCourseTimetableByClass(urpClass));
     }
 
     public List<CourseTimeTableVo> getCourseTimeTableByTeacher(Integer teacherId) {
@@ -223,8 +164,8 @@ public class CourseTimeTableService {
                 .flatMap(x -> x.values().stream().map(UrpCourseTimeTable::adapterToCourseTimetable))
                 .flatMap(Collection::stream)
                 .peek(x -> {
-                    List<UrpClassroom> urpClassroomList = urpClassRoomDao.selectByClassroom(new UrpClassroom().setName(x.getRoomName()));
-                    x.setRoomNumber(urpClassroomList.stream().findFirst().orElse(new UrpClassroom()).getNumber());
+                    UrpClassroom room = roomService.getClassRoomByName(x.getRoomName());
+                    x.setRoomNumber(room == null ? "" : room.getNumber());
                 })
                 .collect(Collectors.toList());
     }
@@ -267,259 +208,7 @@ public class CourseTimeTableService {
 
 
     UrpCourseTimeTableForSpider getCourseTimeTableDetails(Student student) {
-        UrpCourseTimeTableForSpider spiderResult = newUrpSpiderService.getUrpCourseTimeTable(student);
-//        saveToDbAsync(spiderResult, student);
-        return spiderResult;
-    }
-
-    /**
-     * 返回该学期当天的所有课程详情
-     * 从数据库获取的数据为空时，会使用爬虫来爬取数据
-     *
-     * @param student 学生实体
-     * @return 课程时间表详情
-     */
-    public List<CourseTimeTableDetail> getDetailsForCurrentDay(Student student) {
-        SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
-        List<Integer> detailIdList = getCourseTimeTableDetailIdByAccount(student.getAccount());
-        if (detailIdList.isEmpty()) {
-            UrpCourseTimeTableForSpider tableForSpider = getCourseTimeTableDetails(student);
-            return getCurrentDayDataFromSpider(tableForSpider, schoolTime);
-        } else {
-            return courseTimeTableDetailDao.getCourseTimeTableDetailForCurrentDay(detailIdList, schoolTime);
-        }
-
-    }
-
-    /**
-     * 返回当前节的课程详情
-     * 从数据库获取的数据为空时，会使用爬虫来爬取数据
-     *
-     * @param student 学生实体
-     * @param section 结束
-     * @return 课程时间表详情
-     */
-    public List<CourseTimeTableDetail> getDetailsForSection(Student student, int section) {
-        SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
-        List<Integer> detailIdList = getCourseTimeTableDetailIdByAccount(student.getAccount());
-        if (detailIdList.isEmpty()) {
-            try {
-                UrpCourseTimeTableForSpider tableForSpider = getCourseTimeTableDetails(student);
-                if (!hasSchoolCourse(tableForSpider)) {
-                    List<CourseTimeTableDetail> timetable = getCourseTimetableByClass(student);
-                    return filterBySection(timetable, schoolTime, section);
-                }
-                return getAppointSectionDataFromSpider(tableForSpider, schoolTime, section);
-            } catch (UrpRequestException e) {
-                if (e.getCode() == 404) {
-                    List<CourseTimeTableDetail> timetable = getCourseTimetableByClass(student);
-                    return filterBySection(timetable, schoolTime, section);
-                } else {
-                    throw e;
-                }
-            }
-
-
-        } else {
-
-            return courseTimeTableDetailDao.getCourseTimeTableDetailForSection(detailIdList, schoolTime, section);
-        }
-    }
-
-    /**
-     * 将爬虫返回的数据中用于显示的部分全部提取出来，提取的部分为当前学期的所有课程时间表
-     *
-     * @param spiderResult 爬虫返回的结果
-     * @param schoolTime   当前学期等信息
-     * @return 课程时间表详情
-     */
-    private List<CourseTimeTableDetail> getCurrentTermDataFromSpider(UrpCourseTimeTableForSpider spiderResult, SchoolTime schoolTime) {
-        List<CourseTimeTableDetail> result = Lists.newArrayListWithCapacity(16);
-        for (Map<String, UrpCourseTimeTable> map : spiderResult.getDetails()) {
-            for (Map.Entry<String, UrpCourseTimeTable> entry : map.entrySet()) {
-                UrpCourseTimeTable urpCourseTimeTable = entry.getValue();
-                if (CollectionUtils.isEmpty(urpCourseTimeTable.getTimeAndPlaceList())) {
-                    continue;
-                }
-                for (int i = 0, length = urpCourseTimeTable.getTimeAndPlaceList().size(); i < length; i++) {
-                    TimeAndPlace timeAndPlace = urpCourseTimeTable.getTimeAndPlaceList().get(i);
-                    //TimeAndPlace保存了上课的地点和时间，因为周数有时候存在多个的情况，如1-5, 8-16周等情况
-                    //所以TimeAndPlace转换的CourseTimeTableDetail返回的是一个集合
-                    List<CourseTimeTableDetail> details =
-                            timeAndPlace.convertToCourseTimeTableDetail(urpCourseTimeTable.getCourseRelativeInfo(), urpCourseTimeTable.getAttendClassTeacher());
-                    details.stream().filter(detail -> Objects.equals(detail.getTermYear(), schoolTime.getTerm().getTermYear()))
-                            .filter(detail -> detail.getTermOrder() == schoolTime.getTerm().getOrder())
-                            .forEach(result::add);
-                }
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 将爬虫返回的数据中用于显示的部分全部提取出来，提取的部分为当前学期当前周的所有课程时间表
-     *
-     * @param spiderResult 爬虫返回的结果
-     * @param schoolTime   当前学期等信息
-     * @return 课程时间表详情
-     */
-    private List<CourseTimeTableDetail> getCurrentWeekDataFromSpider(UrpCourseTimeTableForSpider spiderResult, SchoolTime schoolTime) {
-        List<CourseTimeTableDetail> result = Lists.newArrayListWithCapacity(16);
-        for (Map<String, UrpCourseTimeTable> map : spiderResult.getDetails()) {
-            for (Map.Entry<String, UrpCourseTimeTable> entry : map.entrySet()) {
-                UrpCourseTimeTable urpCourseTimeTable = entry.getValue();
-                if (CollectionUtils.isEmpty(urpCourseTimeTable.getTimeAndPlaceList())) {
-                    continue;
-                }
-                for (int i = 0, length = urpCourseTimeTable.getTimeAndPlaceList().size(); i < length; i++) {
-                    TimeAndPlace timeAndPlace = urpCourseTimeTable.getTimeAndPlaceList().get(i);
-                    //TimeAndPlace保存了上课的地点和时间，因为周数有时候存在多个的情况，如1-5, 8-16周等情况
-                    //所以TimeAndPlace转换的CourseTimeTableDetail返回的是一个集合
-                    List<CourseTimeTableDetail> details =
-                            timeAndPlace.convertToCourseTimeTableDetail(urpCourseTimeTable.getCourseRelativeInfo(), urpCourseTimeTable.getAttendClassTeacher());
-                    details.stream().filter(detail -> detail.isActiveWeek(schoolTime.getWeek()))
-                            .filter(detail -> Objects.equals(detail.getTermYear(), schoolTime.getTerm().getTermYear()))
-                            .filter(detail -> detail.getTermOrder() == schoolTime.getTerm().getOrder())
-                            .forEach(result::add);
-                }
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 将爬虫返回的数据中用于显示的部分全部提取出来，提取的部分为当前学期当前周当天的所有课程时间表
-     *
-     * @param spiderResult 爬虫返回的结果
-     * @param schoolTime   当前学期等信息
-     * @return 课程时间表详情
-     */
-    private List<CourseTimeTableDetail> getCurrentDayDataFromSpider(UrpCourseTimeTableForSpider spiderResult, SchoolTime schoolTime) {
-        List<CourseTimeTableDetail> result = Lists.newArrayListWithCapacity(5);
-        for (Map<String, UrpCourseTimeTable> map : spiderResult.getDetails()) {
-            for (Map.Entry<String, UrpCourseTimeTable> entry : map.entrySet()) {
-                UrpCourseTimeTable urpCourseTimeTable = entry.getValue();
-                if (CollectionUtils.isEmpty(urpCourseTimeTable.getTimeAndPlaceList())) {
-                    continue;
-                }
-                for (int i = 0, length = urpCourseTimeTable.getTimeAndPlaceList().size(); i < length; i++) {
-                    TimeAndPlace timeAndPlace = urpCourseTimeTable.getTimeAndPlaceList().get(i);
-                    //TimeAndPlace保存了上课的地点和时间，因为周数有时候存在多个的情况，如1-5, 8-16周等情况
-                    //所以TimeAndPlace转换的CourseTimeTableDetail返回的是一个集合
-                    List<CourseTimeTableDetail> details =
-                            timeAndPlace.convertToCourseTimeTableDetail(urpCourseTimeTable.getCourseRelativeInfo(), urpCourseTimeTable.getAttendClassTeacher());
-                    details.stream().filter(detail -> detail.getDay() == schoolTime.getDay())
-                            .filter(detail -> detail.isActiveWeek(schoolTime.getWeek()))
-                            .filter(detail -> Objects.equals(detail.getTermYear(), schoolTime.getTerm().getTermYear()))
-                            .filter(detail -> detail.getTermOrder() == schoolTime.getTerm().getOrder())
-                            .forEach(result::add);
-                }
-            }
-        }
-        return result;
-    }
-
-    private List<CourseTimeTableDetail> getAppointSectionDataFromSpider(UrpCourseTimeTableForSpider spiderResult, SchoolTime schoolTime, int section) {
-        List<CourseTimeTableDetail> result = Lists.newArrayListWithCapacity(1);
-        for (Map<String, UrpCourseTimeTable> map : spiderResult.getDetails()) {
-            for (Map.Entry<String, UrpCourseTimeTable> entry : map.entrySet()) {
-                UrpCourseTimeTable urpCourseTimeTable = entry.getValue();
-                if (CollectionUtils.isEmpty(urpCourseTimeTable.getTimeAndPlaceList())) {
-                    continue;
-                }
-                for (int i = 0, length = urpCourseTimeTable.getTimeAndPlaceList().size(); i < length; i++) {
-                    TimeAndPlace timeAndPlace = urpCourseTimeTable.getTimeAndPlaceList().get(i);
-                    //TimeAndPlace保存了上课的地点和时间，因为周数有时候存在多个的情况，如1-5, 8-16周等情况
-                    //所以TimeAndPlace转换的CourseTimeTableDetail返回的是一个集合
-                    List<CourseTimeTableDetail> details =
-                            timeAndPlace.convertToCourseTimeTableDetail(urpCourseTimeTable.getCourseRelativeInfo(), urpCourseTimeTable.getAttendClassTeacher());
-                    result.addAll(filterBySection(details, schoolTime, section));
-                }
-            }
-        }
-        return result;
-    }
-
-    private List<CourseTimeTableDetail> filterBySection(List<CourseTimeTableDetail> courseTimeTableDetailList,
-                                                        SchoolTime schoolTime, int section) {
-        return courseTimeTableDetailList.stream()
-                .filter(detail -> detail.getDay() == schoolTime.getDay())
-                .filter(detail -> detail.isActiveWeek(schoolTime.getWeek()))
-                .filter(detail -> Objects.equals(detail.getTermYear(), schoolTime.getTerm().getTermYear()))
-                .filter(detail -> detail.getTermOrder() == schoolTime.getTerm().getOrder())
-                .filter(detail -> detail.getOrder() == section)
-                .collect(Collectors.toList());
-
-    }
-
-    private void saveCourseTimeTableToDb(UrpCourseTimeTableForSpider spiderResult, Student student) {
-        for (Map<String, UrpCourseTimeTable> map : spiderResult.getDetails()) {
-            for (Map.Entry<String, UrpCourseTimeTable> entry : map.entrySet()) {
-                UrpCourseTimeTable urpCourseTimeTable = entry.getValue();
-
-                if (!urpCourseTimeTable.getCourseRelativeInfo().getStudentNumber().equals(String.valueOf(student.getAccount()))) {
-                    return;
-                }
-                String courseId = urpCourseTimeTable.getCourseRelativeInfo().getCourseNumber();
-                //查看课程是否存在，不存在就插入数据库
-                urpCourseService.checkOrSaveUrpCourseToDb(courseId, student);
-//                urpCourseService.saveCourse(courseId, sequenceNumber);
-                CourseTimeTableBasicInfo basicInfo = getCourseTimeTableBasicInfo(urpCourseTimeTable);
-                //将课程时间表存储到数据库
-                saveCourseTimeTableDetailsToDb(urpCourseTimeTable, basicInfo, student);
-            }
-        }
-    }
-
-    /**
-     * 将课程搜索结果保存到数据库中
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public void saveCourseTimeTableDetailsToDb(UrpCourseTimeTable urpCourseTimeTable, CourseTimeTableBasicInfo basicInfo, Student student) {
-        if (CollectionUtils.isEmpty(urpCourseTimeTable.getTimeAndPlaceList())) {
-            return;
-        }
-        for (int i = 0, length = urpCourseTimeTable.getTimeAndPlaceList().size(); i < length; i++) {
-            TimeAndPlace timeAndPlace = urpCourseTimeTable.getTimeAndPlaceList().get(i);
-            //TimeAndPlace保存了上课的地点和时间，因为周数有时候存在多个的情况，如1-5, 8-16周等情况
-            //所以TimeAndPlace转换的CourseTimeTableDetail返回的是一个集合
-            List<CourseTimeTableDetail> detailList =
-                    timeAndPlace.convertToCourseTimeTableDetail(urpCourseTimeTable.getCourseRelativeInfo(), urpCourseTimeTable.getAttendClassTeacher());
-
-            Set<CourseTimeTableDetail> detailHashSet = new HashSet<>(detailList);
-            if (detailHashSet.size() != detailList.size()) {
-                log.info("有重复数据 {}", student.getClasses());
-            }
-
-            List<Integer> idList = Lists.newArrayList();
-            List<CourseTimeTableDetail> needInsertDetailList = Lists.newArrayList();
-
-            for (CourseTimeTableDetail detail : detailHashSet) {
-                List<CourseTimeTableDetail> dbResult = courseTimeTableDetailDao.selectByDetail(detail);
-                if (dbResult.size() == 0) {
-                    needInsertDetailList.add(detail);
-                } else if (dbResult.size() == 1) {
-                    idList.add(dbResult.get(0).getId());
-                } else {
-                    List<Integer> list = dbResult.stream().map(CourseTimeTableDetail::getId).collect(Collectors.toList());
-
-                    log.error("数据库重复课程信息 size:{}  id:{}", dbResult.size(), list.toString());
-                }
-            }
-
-            if (!CollectionUtils.isEmpty(needInsertDetailList)) {
-                List<Integer> list = saveTimeTableDetail(needInsertDetailList, timeAndPlace, basicInfo);
-                log.info("class {} 插入detail size:{}  id:{}", student.getClasses(), list.size(), list.toString());
-                idList.addAll(list);
-            }
-
-            //关联班级和课程详情
-            if (!CollectionUtils.isEmpty(idList)) {
-
-                saveClassAndDetailRelative(idList, student, basicInfo.getTermYear(), basicInfo.getTermOrder());
-            }
-        }
-
+        return newUrpSpiderService.getUrpCourseTimeTable(student);
     }
 
     private void saveRelative(List<Integer> needInsertIds, Student student, String termYear, Integer termOrder) {
@@ -565,39 +254,13 @@ public class CourseTimeTableService {
             } else {
                 if (!course.equals(courseTimetable)) {
                     courseTimeTableDao.updateByUniqueKey(courseTimetable);
-                    log.info("courseTimetable origin {}\nupdate {}",course, courseTimetable);
+                    log.info("courseTimetable origin {}\nupdate {}", course, courseTimetable);
                 }
                 idList.add(course.getId());
             }
         }
 
         return idList;
-    }
-
-    private void saveClassAndDetailRelative(List<Integer> needInsertIds, Student student, String termYear, Integer termOrder) {
-        courseTimeTableDetailDao.insertStudentCourseTimeTableBatch(needInsertIds, student.getAccount(), termYear, termOrder);
-    }
-
-    private List<Integer> saveTimeTableDetail(List<CourseTimeTableDetail> needInsertDetails, TimeAndPlace timeAndPlace, CourseTimeTableBasicInfo basicInfo) throws RoomParseException {
-        for (CourseTimeTableDetail detail : needInsertDetails) {
-            detail.setCourseTimeTableBasicInfoId(basicInfo.getId());
-            courseTimeTableDetailDao.insertCourseTimeTableDetail(detail);
-            Room parseResult = roomService.parseToRoomForSpider(timeAndPlace.getClassroomName(), timeAndPlace.getTeachingBuildingName());
-            roomDao.saveOrGetRoomFromDb(parseResult);
-        }
-        return needInsertDetails.stream().map(CourseTimeTableDetail::getId).collect(Collectors.toList());
-
-    }
-
-    private CourseTimeTableBasicInfo getCourseTimeTableBasicInfo(UrpCourseTimeTable urpCourseTimeTable) {
-        Plan plan = getPlan(urpCourseTimeTable);
-        CourseTimeTableBasicInfo basicInfoSpiderResult = urpCourseTimeTable.convertToCourseTimeTableBasicInfo();
-        basicInfoSpiderResult.setPlanId(plan.getId());
-        return courseTimeTableBasicInfoDao.saveOrGetCourseTimeTableBasicInfoFromDb(basicInfoSpiderResult);
-    }
-
-    private Plan getPlan(UrpCourseTimeTable urpCourseTimeTable) {
-        return planDao.saveOrGetPlanFromDb(urpCourseTimeTable.convertToPlan());
     }
 
     /**
@@ -610,87 +273,46 @@ public class CourseTimeTableService {
         return detail.getOrder() + "-" + (detail.getOrder() + detail.getContinuingSession() - 1);
     }
 
-    private List<CourseTimeTableDetailDto> assembleCourseTimeTableDto(List<CourseTimeTableDetail> details) {
-        return details.stream().map(detail -> {
-            CourseTimeTableDetailDto detailVo = new CourseTimeTableDetailDto();
-            detailVo.setDetail(detail);
-
-            Course course = urpCourseService.getCurrentTermCourse(detail.getCourseId(), detail.getCourseSequenceNumber());
-            UrpCourse urpCourse = new UrpCourse();
-            urpCourse.setCourseName(course.getName());
-            detailVo.setUrpCourse(urpCourse);
-            return detailVo;
-        }).collect(Collectors.toList());
-    }
-
-    private List<Integer> getCourseTimeTableDetailIdByAccount(Integer account) {
-        SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
-
-        StudentCourseTable table = new StudentCourseTable()
-                .setAccount(account)
-                .setTermOrder(schoolTime.getTerm().getOrder())
-                .setTermYear(schoolTime.getTerm().getTermYear());
-        List<StudentCourseTable> tableList = courseTimeTableDetailDao.selectStudentCourseTimeTableRelative(table);
-        return tableList.stream().map(StudentCourseTable::getCourseTimeTableId).collect(Collectors.toList());
-    }
-
-    private List<Integer> getCourseTimeTableIdByAccount(Integer account) {
+    private List<CourseTimetable> getCurrentTermCourseTimeTableByAccount(Integer account) {
         SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
 
         StudentCourseTimeTable table = new StudentCourseTimeTable()
                 .setStudentId(account)
                 .setTermOrder(schoolTime.getTerm().getOrder())
                 .setTermYear(schoolTime.getTerm().getTermYear());
-        List<StudentCourseTimeTable> tableList = studentCourseTimeTableDao.selectByExample(table);
-        return tableList.stream().map(StudentCourseTimeTable::getCourseTimetableId).collect(Collectors.toList());
+        return courseTimeTableDao.selectByStudentRelative(table);
     }
 
-    private List<CourseTimeTableDetail> getCourseTimetableByClass(Student student) {
-        UrpClass urpClass = classService.getUrpClassByStudent(student);
+    List<CourseTimetable> getCurrentTermCourseTimetableByClass(String classNum) {
 
-        if(urpClass == null){
+        if (StringUtils.isEmpty(classNum)) {
             return Collections.emptyList();
         }
 
-        return classCourseTimetableDao.selectByPojo(new ClassCourseTimetable().setClassId(urpClass.getClassNum()))
-                .stream()
-                .map(ClassCourseTimetable::getCourseTimetableId)
-                .map(id -> {
-                    CourseTimetable timetable = courseTimeTableDao.selectByPrimaryKey(id);
-                    return new CourseTimeTableDetail()
-                            .setOrder(timetable.getClassOrder())
-                            .setDay(timetable.getClassDay())
-                            .setCourseId(timetable.getCourseId())
-                            .setCourseSequenceNumber(timetable.getCourseSequenceNumber())
-                            .setAttendClassTeacher(timetable.getAttendClassTeacher())
-                            .setCampusName(timetable.getCampusName())
-                            .setStartWeek(timetable.getStartWeek())
-                            .setEndWeek(timetable.getEndWeek())
-                            .setWeekDescription(timetable.getWeekDescription())
-                            .setWeek(timetable.getClassInSchoolWeek())
-                            .setTermYear(timetable.getTermYear())
-                            .setTermOrder(timetable.getTermOrder())
-                            .setRoomName(timetable.getRoomName());
-                })
-                .collect(Collectors.toList());
+        SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
+        ClassCourseTimetable relative = new ClassCourseTimetable()
+                .setClassId(classNum)
+                .setTermYear(schoolTime.getTerm().getTermYear())
+                .setTermOrder(schoolTime.getTerm().getOrder());
+
+        return courseTimeTableDao.selectByClassRelative(relative);
     }
 
-    private List<CourseTimetable> getCourseTimetableByClazz(Student student) {
-        UrpClass urpClass = classService.getUrpClassByStudent(student);
-
-        if(urpClass == null){
+    List<CourseTimetable> getCurrentTermCourseTimetableByClass(UrpClass urpClass) {
+        if (urpClass == null){
             return Collections.emptyList();
         }
-
-        return getCourseTimetableByClazz(urpClass);
+        return getCurrentTermCourseTimetableByClass(urpClass.getClassNum());
     }
 
+    List<CourseTimetable> getCurrentTermCourseTimetableByClass(Student student){
+        UrpClass urpClass = classService.getUrpClassByStudent(student);
+        return getCurrentTermCourseTimetableByClass(urpClass);
+    }
 
-    private List<CourseTimetable> getCourseTimetableByClazz(UrpClass urpClass) {
-        return classCourseTimetableDao.selectByPojo(new ClassCourseTimetable().setClassId(urpClass.getClassNum()))
-                .stream()
-                .map(x -> courseTimeTableDao.selectByPrimaryKey(x.getCourseTimetableId()))
-                .collect(Collectors.toList());
+    List<CourseTimeTableVo> getCurrentTermCourseTimetableVOByClazz(Student student){
+        List<CourseTimetable> timetableList = getCurrentTermCourseTimetableByClass(student);
+        return transCourseTimeTableToVo(timetableList);
     }
 
 }

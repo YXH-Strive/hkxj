@@ -20,7 +20,6 @@ import cn.hkxj.platform.utils.DateUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.lucene.search.MultiCollectorManager;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -31,6 +30,8 @@ import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.function.BinaryOperator;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -49,8 +50,6 @@ public class NewGradeSearchService {
     private UrpExamDao urpExamDao;
     @Resource
     private StudentDao studentDao;
-    @Resource
-    private UrpCourseService urpCourseService;
     @Resource
     private NewUrpSpiderService newUrpSpiderService;
     @Resource
@@ -239,7 +238,7 @@ public class NewGradeSearchService {
                     CompletableFuture.completedFuture(gradeDao.getEverTermGradeByAccount(student.getAccount()));
         }else {
             schemeFuture =
-                    CompletableFuture.supplyAsync(() -> getSchemeGradeFromSpider(student), gradeAutoUpdatePool);
+                    CompletableFuture.supplyAsync(() -> getSchemeGrade(student), gradeAutoUpdatePool);
         }
 
         CompletableFuture<List<Grade>> completableFuture = currentFuture.thenCombine(schemeFuture,
@@ -334,9 +333,7 @@ public class NewGradeSearchService {
             course.setTermYear(x.getTermYear());
             course.setTermOrder(x.getTermOrder());
             return new GradeVo()
-                    .setCourse(urpCourseService.getCourseFromCache(x.getCourseNumber(), x.getCourseOrder(),
-                            x.getTermYear(), x.getTermOrder(),
-                            course))
+                    .setCourse(course)
                     .setAccount(x.getAccount())
                     .setScore(x.getScore())
                     .setGradePoint(x.getGradePoint())
@@ -366,26 +363,24 @@ public class NewGradeSearchService {
 
     }
 
-    public List<Grade> getSchemeGradeFromSpider(Student student) {
+    public List<Grade> getSchemeGrade(Student student) {
 
-        log.info("get scheme grade start");
-        long l = System.currentTimeMillis();
-        List<Grade> gradeList = newUrpSpiderService.getSchemeGrade(student)
+        List<Grade> gradeList = getSchemeGradeFromSpider(student);
+
+        gradeDao.insertBatch(gradeList);
+
+        addEverFinishFetchAccount(student.getAccount().toString());
+        return gradeList;
+
+    }
+
+    public List<Grade> getSchemeGradeFromSpider(Student student){
+        return newUrpSpiderService.getSchemeGrade(student)
                 .stream()
                 .map(Scheme::getCjList)
                 .flatMap(Collection::stream)
                 .map(SchemeGradeItem::transToGrade)
                 .collect(Collectors.toList());
-
-        for (Grade grade : gradeList) {
-            gradeDao.insertSelective(grade);
-        }
-
-        log.info("get scheme grade finish in {}", System.currentTimeMillis() - l);
-
-        addEverFinishFetchAccount(student.getAccount().toString());
-        return gradeList;
-
     }
 
     private Date parseGradeOperateTime(String text) {
@@ -400,36 +395,28 @@ public class NewGradeSearchService {
      */
     public List<Grade> checkUpdate(Student student, List<Grade> gradeList) {
         List<Grade> gradeListFromDb = gradeDao.getCurrentTermGradeByAccount(student.getAccount());
+        // 如果数据库之前没有保存过该学号成绩，则直接返回抓取结果
         if (CollectionUtils.isEmpty(gradeListFromDb)) {
+            gradeList.forEach(x-> x.setUpdate(true));
             return gradeList;
         }
+        Function<Grade, String> keyMapper = grade -> grade.getCourseNumber() + grade.getCourseOrder();
 
+        BinaryOperator<Grade> binaryOperator = (oldValue, newValue) -> {
+            if (oldValue.getScore() == -1) {
+                return newValue;
+            } else {
+                return oldValue;
+            }
+        };
 
-        // 这个逻辑是处理教务网同一个课程返回两个结果
+        // 这个逻辑是处理教务网同一个课程返回两个结果，那么选择有成绩的结果
         Map<String, Grade> spiderGradeMap = gradeList.stream()
-                .collect(Collectors.toMap(x -> x.getCourseNumber() + x.getCourseOrder(), x -> x,
-                        (oldValue, newValue) -> {
-                            if (oldValue.getScore() == -1) {
-                                return newValue;
-                            } else {
-                                return oldValue;
-                            }
-                        }
-
-                ));
+                .collect(Collectors.toMap(keyMapper, x -> x,binaryOperator));
 
 
         Map<String, Grade> dbGradeMap = gradeListFromDb.stream()
-                .collect(Collectors.toMap(x -> x.getCourseNumber() + x.getCourseOrder(), x -> x,
-                        (oldValue, newValue) -> {
-                            if (oldValue.getScore() == -1) {
-                                return newValue;
-                            } else {
-                                return oldValue;
-                            }
-                        }
-
-                ));
+                .collect(Collectors.toMap(keyMapper, x -> x, binaryOperator));
 
         List<Grade> resultList = spiderGradeMap.entrySet().stream()
                 .map(entry -> {
@@ -455,13 +442,17 @@ public class NewGradeSearchService {
 
 
     public void saveUpdateGrade(List<Grade> gradeList) {
-        for (Grade grade : gradeList) {
-            if (grade.getId() != null) {
-                gradeDao.updateByPrimaryKeySelective(grade);
-            } else {
-                gradeDao.insertSelective(grade);
-            }
+        List<Grade> updateList = gradeList.stream()
+                .filter(grade -> grade.getId() != null && grade.isUpdate())
+                .collect(Collectors.toList());
+
+        List<Grade> newList = gradeList.stream()
+                .filter(grade -> grade.getId() == null)
+                .collect(Collectors.toList());
+        for (Grade grade : updateList) {
+            gradeDao.updateByPrimaryKeySelective(grade);
         }
+        gradeDao.insertBatch(newList);
 
 
     }
@@ -505,7 +496,9 @@ public class NewGradeSearchService {
             for (UrpGradeAndUrpCourse urpGradeAndUrpCourse : studentGrades) {
                 Double grade = urpGradeAndUrpCourse.getNewGrade().getUrpGrade().getScore();
                 //如果分数为空，就直接跳过当前元素
-                if (Objects.isNull(grade)) continue;
+                if (Objects.isNull(grade)) {
+                    continue;
+                }
                 buffer.append("考试名称：").append(urpGradeAndUrpCourse.getUrpCourse().getCourseName()).append("\n")
                         .append("成绩：").append(grade == -1 ? "" : decimalFormat.format(grade)).append("   学分：")
                         .append((decimalFormat.format(urpGradeAndUrpCourse.getUrpCourse().getCredit()))).append("\n\n");

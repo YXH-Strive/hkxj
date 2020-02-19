@@ -11,6 +11,7 @@
 .springBeans
 .sts4-cache
 *.log
+generatorConfig.xml
 
 ### IntelliJ IDEA ###
 .idea

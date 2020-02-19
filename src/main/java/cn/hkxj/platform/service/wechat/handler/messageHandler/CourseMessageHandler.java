@@ -3,12 +3,9 @@ package cn.hkxj.platform.service.wechat.handler.messageHandler;
 import cn.hkxj.platform.builder.TemplateBuilder;
 import cn.hkxj.platform.config.wechat.WechatMpPlusProperties;
 import cn.hkxj.platform.config.wechat.WechatTemplateProperties;
-import cn.hkxj.platform.pojo.CourseTimeTableDetail;
 import cn.hkxj.platform.pojo.ScheduleTask;
-import cn.hkxj.platform.pojo.Student;
 import cn.hkxj.platform.pojo.constant.MiniProgram;
 import cn.hkxj.platform.pojo.constant.SubscribeScene;
-import cn.hkxj.platform.pojo.wechat.Openid;
 import cn.hkxj.platform.service.CourseTimeTableService;
 import cn.hkxj.platform.service.OpenIdService;
 import cn.hkxj.platform.service.ScheduleTaskService;
@@ -77,10 +74,10 @@ public class CourseMessageHandler implements WxMpMessageHandler {
     }
 
     private String getReplyContent(WxMpXmlMessage wxMpXmlMessage, WxMpService wxMpService){
-        Openid openid = openIdService.getOpenid(wxMpXmlMessage.getFromUser(), wxMpService.getWxMpConfigStorage().getAppId()).get(0);
-        Student student = openIdService.getStudentByOpenId(openid.getOpenid(), wxMpService.getWxMpConfigStorage().getAppId());
-        List<CourseTimeTableDetail> details = courseTimeTableService.getDetailsForCurrentDay(student);
-        return courseTimeTableService.convertToText(details);
+        // TODO 重写回复的逻辑
+
+
+        return "";
     }
 
     //plus的处理逻辑

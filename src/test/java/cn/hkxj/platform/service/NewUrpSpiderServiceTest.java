@@ -5,34 +5,17 @@ import cn.hkxj.platform.dao.CourseDao;
 import cn.hkxj.platform.dao.CourseTimeTableDao;
 import cn.hkxj.platform.dao.CourseTimeTableDetailDao;
 import cn.hkxj.platform.dao.StudentDao;
-import cn.hkxj.platform.pojo.*;
-import cn.hkxj.platform.spider.NewUrpSpider;
-import cn.hkxj.platform.spider.newmodel.SearchResult;
+import cn.hkxj.platform.pojo.Student;
 import cn.hkxj.platform.spider.newmodel.course.UrpCourseForSpider;
-import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTable;
-import cn.hkxj.platform.spider.newmodel.coursetimetable.UrpCourseTimeTableForSpider;
 import cn.hkxj.platform.spider.newmodel.evaluation.EvaluationPagePost;
 import cn.hkxj.platform.spider.newmodel.evaluation.EvaluationPost;
 import cn.hkxj.platform.spider.newmodel.examtime.UrpExamTime;
-import cn.hkxj.platform.spider.newmodel.grade.CurrentGrade;
 import cn.hkxj.platform.spider.newmodel.grade.detail.GradeDetailSearchPost;
 import cn.hkxj.platform.spider.newmodel.grade.detail.MxGradeDetail;
 import cn.hkxj.platform.spider.newmodel.grade.detail.UrpGradeDetailForSpider;
 import cn.hkxj.platform.spider.newmodel.grade.detail.XsGradeDetail;
 import cn.hkxj.platform.spider.newmodel.grade.general.UrpGeneralGradeForSpider;
-import cn.hkxj.platform.spider.newmodel.grade.general.UrpGradeForSpider;
-import cn.hkxj.platform.spider.newmodel.searchclass.ClassInfoSearchResult;
-import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomPost;
-import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomResult;
-import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchResultWrapper;
-import cn.hkxj.platform.spider.newmodel.searchclass.CourseTimetableSearchResult;
-import cn.hkxj.platform.spider.newmodel.searchcourse.SearchCoursePost;
-import cn.hkxj.platform.spider.newmodel.searchcourse.SearchCourseResult;
-import cn.hkxj.platform.spider.newmodel.searchteacher.SearchTeacherPost;
-import cn.hkxj.platform.spider.newmodel.searchteacher.SearchTeacherResult;
-import com.google.common.base.Splitter;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections.CollectionUtils;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,11 +23,8 @@ import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.context.web.WebAppConfiguration;
 
 import javax.annotation.Resource;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @RunWith(SpringRunner.class)
@@ -81,13 +61,9 @@ public class NewUrpSpiderServiceTest {
 
     @Test
     public void getCurrentTermGrade(){
-        Student student = studentDao.selectStudentByAccount(2019020856);
-
-        CurrentGrade grade = newUrpSpiderService.getCurrentTermGrade(student);
-
-        for (UrpGradeForSpider gradeForSpider : grade.getList()) {
-            System.out.println(gradeForSpider);
-        }
+        Student student = studentDao.selectStudentByAccount(2017025838);
+        CompletableFuture.runAsync(() -> newUrpSpiderService.getCurrentGeneralGrade(student));
+        newUrpSpiderService.getCurrentGeneralGrade(student);
 
 
     }

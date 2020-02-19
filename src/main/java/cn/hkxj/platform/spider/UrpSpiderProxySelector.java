@@ -1,6 +1,5 @@
 package cn.hkxj.platform.spider;
 
-import cn.hkxj.platform.exceptions.UrpException;
 import cn.hkxj.platform.pojo.constant.RedisKeys;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -44,7 +43,7 @@ public class UrpSpiderProxySelector extends ProxySelector {
                 ProxyData proxyData = getProxyData();
                 list.add(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(proxyData.ip, proxyData.port)));
             }else {
-                list.add(new Proxy(Proxy.Type.SOCKS, new InetSocketAddress("49.234.214.204", 8888)));
+                list.add(new Proxy(Proxy.Type.HTTP, new InetSocketAddress("49.234.214.204", 8888)));
             }
 
         }else {
@@ -57,12 +56,7 @@ public class UrpSpiderProxySelector extends ProxySelector {
     @Override
     public void connectFailed(URI uri, SocketAddress sa, IOException ioe) {
 
-        if((ioe instanceof SocketTimeoutException || ioe instanceof SocketException) && proxyCache.canUpdate()){
-            log.info("update proxy");
-            updateProxy();
-        }else if(!(ioe instanceof SocketTimeoutException)){
-            log.error("poxy connectFailed", ioe);
-        }
+        log.error("proxy connect fail {}", ioe.getMessage());
 
     }
 

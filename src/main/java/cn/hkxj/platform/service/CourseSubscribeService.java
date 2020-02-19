@@ -2,15 +2,17 @@ package cn.hkxj.platform.service;
 
 import cn.hkxj.platform.config.wechat.WechatMpPlusProperties;
 import cn.hkxj.platform.dao.ScheduleTaskDao;
-import cn.hkxj.platform.mapper.*;
-import cn.hkxj.platform.pojo.*;
+import cn.hkxj.platform.mapper.OpenidMapper;
+import cn.hkxj.platform.mapper.OpenidPlusMapper;
+import cn.hkxj.platform.mapper.StudentMapper;
+import cn.hkxj.platform.pojo.ScheduleTask;
+import cn.hkxj.platform.pojo.Student;
 import cn.hkxj.platform.pojo.constant.SubscribeScene;
 import cn.hkxj.platform.pojo.dto.CourseTimeTableDetailDto;
 import cn.hkxj.platform.pojo.example.OpenidExample;
 import cn.hkxj.platform.pojo.example.StudentExample;
 import cn.hkxj.platform.pojo.wechat.CourseSubscriptionMessage;
 import cn.hkxj.platform.pojo.wechat.Openid;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -154,9 +156,9 @@ public class CourseSubscribeService {
      * @return 课表时间表实体列表
      */
     CourseTimeTableDetailDto getCourseTimeTablesSection(int account, int section) {
-        List<CourseTimeTableDetailDto> detailDtoList = courseTimeTableService.getAppointSectionCourseTimeTableDetailDto(account, section);
+        // TODO 重写这部分逻辑
         //因为查询的是当前节的课程，只会有一节，所以直接get(0)
-        return detailDtoList.size() > 0 ? detailDtoList.get(0) : null;
+        return null;
     }
 
     /**

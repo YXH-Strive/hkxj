@@ -4,6 +4,7 @@ import cn.hkxj.platform.utils.DateUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Date;
 
@@ -81,6 +82,76 @@ public class Grade {
 
     private boolean update = false;
 
+    public String getLevelName(){
+        if(StringUtils.isEmpty(this.levelName)){
+            return "";
+        }
+        return this.levelName;
+
+    }
+
+    public String getExamTypeCode() {
+        if(StringUtils.isEmpty(this.examTypeCode)){
+            return "";
+        }
+        return examTypeCode;
+    }
+
+    public String getUnpassedReasonCode() {
+        if(StringUtils.isEmpty(this.unpassedReasonCode)){
+            return "";
+        }
+        return unpassedReasonCode;
+    }
+
+    public String getUnpassedReasonExplain() {
+        if(StringUtils.isEmpty(this.unpassedReasonExplain)){
+            return "";
+        }
+        return unpassedReasonExplain;
+    }
+
+    public String getRemark() {
+        if(StringUtils.isEmpty(this.remark)){
+            return "";
+        }
+        return remark;
+    }
+
+    public String getReplaceCourseNumber() {
+        if(StringUtils.isEmpty(this.replaceCourseNumber)){
+            return "";
+        }
+        return replaceCourseNumber;
+    }
+
+    public String getRetakeCourseMark() {
+        if(StringUtils.isEmpty(this.retakeCourseMark)){
+            return "";
+        }
+        return retakeCourseMark;
+    }
+
+    public String getRetakecourseModeCode() {
+        if(StringUtils.isEmpty(this.retakecourseModeCode)){
+            return "";
+        }
+        return retakecourseModeCode;
+    }
+
+    public String getRetakeCourseModeExplain() {
+        if(StringUtils.isEmpty(this.retakeCourseModeExplain)){
+            return "";
+        }
+        return retakeCourseModeExplain;
+    }
+
+    public String getStandardPoint() {
+        if(StringUtils.isEmpty(this.standardPoint)){
+            return "";
+        }
+        return standardPoint;
+    }
 
     public Grade setGradePoint(Double gradePoint) {
         if (gradePoint == 0 && this.score != -1) {
@@ -102,5 +173,9 @@ public class Grade {
         return this.getTermYear().equals(term.getTermYear()) && this.getTermOrder().equals(term.getOrder());
 
     }
+
+
+
+
 
 }

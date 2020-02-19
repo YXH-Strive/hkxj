@@ -1,9 +1,10 @@
 package cn.hkxj.platform.dao;
 
-import cn.hkxj.platform.mapper.CourseTimetableMapper;
+import cn.hkxj.platform.mapper.ext.CourseTimetableExtMapper;
+import cn.hkxj.platform.pojo.ClassCourseTimetable;
 import cn.hkxj.platform.pojo.CourseTimetable;
+import cn.hkxj.platform.pojo.StudentCourseTimeTable;
 import cn.hkxj.platform.pojo.example.CourseTimetableExample;
-import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -12,17 +13,17 @@ import java.util.List;
 @Service
 public class CourseTimeTableDao {
     @Resource
-    private CourseTimetableMapper courseTimetableMapper;
+    private CourseTimetableExtMapper courseTimetableExtMapper;
 
 
     public CourseTimetable selectByPrimaryKey(Integer id) {
-        return courseTimetableMapper.selectByPrimaryKey(id);
+        return courseTimetableExtMapper.selectByPrimaryKey(id);
     }
 
     public List<CourseTimetable> selectByCourseTimetable(CourseTimetable courseTimetable) {
         CourseTimetableExample example = getExample(courseTimetable);
 
-        return courseTimetableMapper.selectByExample(example);
+        return courseTimetableExtMapper.selectByExample(example);
     }
 
     public CourseTimetable selectUniqueCourse(CourseTimetable courseTimetable) {
@@ -31,7 +32,7 @@ public class CourseTimeTableDao {
 
         getUniqueExample(courseTimetable, example, criteria);
 
-        return courseTimetableMapper.selectByExample(example).stream().findFirst().orElse(null);
+        return courseTimetableExtMapper.selectByExample(example).stream().findFirst().orElse(null);
 
     }
 
@@ -81,20 +82,30 @@ public class CourseTimeTableDao {
         return example;
     }
 
+    public List<CourseTimetable> selectByStudentRelative(StudentCourseTimeTable relative) {
+
+        return courseTimetableExtMapper.selectByStudentRelative(relative);
+    }
+
+    public List<CourseTimetable> selectByClassRelative(ClassCourseTimetable relative) {
+
+        return courseTimetableExtMapper.selectByClassRelative(relative);
+    }
+
     public List<CourseTimetable> selectByIdList(List<Integer> idList) {
         CourseTimetableExample example = new CourseTimetableExample();
         CourseTimetableExample.Criteria criteria = example.createCriteria();
         criteria.andIdIn(idList);
 
-        return courseTimetableMapper.selectByExample(example);
+        return courseTimetableExtMapper.selectByExample(example);
     }
 
     public void insertSelective(CourseTimetable courseTimetable) {
-        courseTimetableMapper.insertSelective(courseTimetable);
+        courseTimetableExtMapper.insertSelective(courseTimetable);
     }
 
     public void updateByPrimaryKeySelective(CourseTimetable courseTimetable) {
-        courseTimetableMapper.updateByPrimaryKeySelective(courseTimetable);
+        courseTimetableExtMapper.updateByPrimaryKeySelective(courseTimetable);
     }
 
     public void updateByUniqueKey(CourseTimetable courseTimetable) {
@@ -102,6 +113,6 @@ public class CourseTimeTableDao {
         CourseTimetableExample.Criteria criteria = example.createCriteria();
         getUniqueExample(courseTimetable, example, criteria);
 
-        courseTimetableMapper.updateByExampleSelective(courseTimetable, example);
+        courseTimetableExtMapper.updateByExampleSelective(courseTimetable, example);
     }
 }

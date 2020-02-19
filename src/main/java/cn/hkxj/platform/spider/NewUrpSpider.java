@@ -23,11 +23,11 @@ import cn.hkxj.platform.spider.newmodel.grade.general.UrpGeneralGradeForSpider;
 import cn.hkxj.platform.spider.newmodel.grade.general.UrpGradeForSpider;
 import cn.hkxj.platform.spider.newmodel.grade.scheme.Scheme;
 import cn.hkxj.platform.spider.newmodel.searchclass.ClassInfoSearchResult;
+import cn.hkxj.platform.spider.newmodel.searchclass.CourseTimetableSearchResult;
+import cn.hkxj.platform.spider.newmodel.searchclass.SearchClassInfoPost;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomPost;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchClassroomResult;
 import cn.hkxj.platform.spider.newmodel.searchclassroom.SearchResultWrapper;
-import cn.hkxj.platform.spider.newmodel.searchclass.CourseTimetableSearchResult;
-import cn.hkxj.platform.spider.newmodel.searchclass.SearchClassInfoPost;
 import cn.hkxj.platform.spider.newmodel.searchcourse.SearchCoursePost;
 import cn.hkxj.platform.spider.newmodel.searchcourse.SearchCourseResult;
 import cn.hkxj.platform.spider.newmodel.searchteacher.SearchTeacherPost;
@@ -54,9 +54,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
 import java.net.ProxySelector;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -207,8 +206,8 @@ public class NewUrpSpider {
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .cookieJar(COOKIE_JAR)
             .retryOnConnectionFailure(true)
-            .connectTimeout(500L, TimeUnit.MILLISECONDS)
-            .readTimeout(800L, TimeUnit.MILLISECONDS)
+            .connectTimeout(5000L, TimeUnit.MILLISECONDS)
+            .readTimeout(8000L, TimeUnit.MILLISECONDS)
             .addInterceptor(new RetryInterceptor(5))
             .followRedirects(false)
             .proxySelector(proxyselector)
@@ -241,34 +240,38 @@ public class NewUrpSpider {
         MDC.remove("preLoad");
         this.account = account;
         this.password = password;
-        if (hasLoginCookieCache(account)) {
-            return;
-        }
-        PreLoadCaptcha preLoadCaptcha;
-        VerifyCode verifyCode = null;
-
-        while ((preLoadCaptcha = queue.poll()) != null) {
-            if (!preLoadCaptcha.isExpire()) {
-                MDC.put("preLoad", preLoadCaptcha.preloadCookieId);
-                verifyCode = preLoadCaptcha.captcha;
-                break;
+        synchronized (this.account.intern()){
+            if (hasLoginCookieCache(account)) {
+                log.info("account {} has login", account);
+                return;
             }
+            PreLoadCaptcha preLoadCaptcha;
+            VerifyCode verifyCode = null;
+            log.info("account {} start login", account);
+            while ((preLoadCaptcha = queue.poll()) != null) {
+                if (!preLoadCaptcha.isExpire()) {
+                    MDC.put("preLoad", preLoadCaptcha.preloadCookieId);
+                    verifyCode = preLoadCaptcha.captcha;
+                    break;
+                }
+            }
+            if (verifyCode == null) {
+                verifyCode = getCaptcha();
+            }
+
+            Base64.Encoder encoder = Base64.getEncoder();
+
+            UUID uuid = UUID.randomUUID();
+            HashOperations<String, String, String> opsForHash = stringRedisTemplate.opsForHash();
+
+            opsForHash.put(RedisKeys.CAPTCHA.getName(), uuid.toString(), encoder.encodeToString(verifyCode.getData().clone()));
+            String code = CaptchaBreaker.getCode(uuid.toString());
+
+            studentCheck(account, password, code, uuid.toString());
+
+            opsForHash.delete(RedisKeys.CAPTCHA.getName(), uuid.toString());
         }
-        if (verifyCode == null) {
-            verifyCode = getCaptcha();
-        }
 
-        Base64.Encoder encoder = Base64.getEncoder();
-
-        UUID uuid = UUID.randomUUID();
-        HashOperations<String, String, String> opsForHash = stringRedisTemplate.opsForHash();
-
-        opsForHash.put(RedisKeys.CAPTCHA.getName(), uuid.toString(), encoder.encodeToString(verifyCode.getData().clone()));
-        String code = CaptchaBreaker.getCode(uuid.toString());
-
-        studentCheck(account, password, code, uuid.toString());
-
-        opsForHash.delete(RedisKeys.CAPTCHA.getName(), uuid.toString());
     }
 
     /**
@@ -900,7 +903,7 @@ public class NewUrpSpider {
 
 
     private static String getContent(Request request) {
-        String content = new String(execute(request));
+        String content = new String(execute(request), StandardCharsets.UTF_8);
         if (content.contains("invalidSession") || content.contains("login")) {
             COOKIE_JAR.clearSession();
             throw new UrpSessionExpiredException("session expired");
