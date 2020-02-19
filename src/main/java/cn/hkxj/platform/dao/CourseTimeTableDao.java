@@ -1,5 +1,6 @@
 package cn.hkxj.platform.dao;
 
+import cn.hkxj.platform.mapper.CourseTimetableMapper;
 import cn.hkxj.platform.mapper.ext.CourseTimetableExtMapper;
 import cn.hkxj.platform.pojo.ClassCourseTimetable;
 import cn.hkxj.platform.pojo.CourseTimetable;
@@ -14,10 +15,16 @@ import java.util.List;
 public class CourseTimeTableDao {
     @Resource
     private CourseTimetableExtMapper courseTimetableExtMapper;
+    @Resource
+    private CourseTimetableMapper courseTimetableMapper;
 
 
     public CourseTimetable selectByPrimaryKey(Integer id) {
         return courseTimetableExtMapper.selectByPrimaryKey(id);
+    }
+
+    public List<CourseTimetable> selectcourse_timetable(List<Integer> courseTimetableId) {
+        return courseTimetableMapper.selectcourse_timetable(courseTimetableId);
     }
 
     public List<CourseTimetable> selectByCourseTimetable(CourseTimetable courseTimetable) {
@@ -98,6 +105,10 @@ public class CourseTimeTableDao {
         criteria.andIdIn(idList);
 
         return courseTimetableExtMapper.selectByExample(example);
+    }
+
+    public List<CourseTimetable> selectCourseTimeTable(List<Integer> idList) {
+        return courseTimetableMapper.selectCourseTimeTable(idList);
     }
 
     public void insertSelective(CourseTimetable courseTimetable) {

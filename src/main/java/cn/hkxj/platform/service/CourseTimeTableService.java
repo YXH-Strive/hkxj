@@ -49,6 +49,8 @@ public class CourseTimeTableService {
     private TeacherDao teacherDao;
     @Resource
     private UrpClassDao urpClassDao;
+    @Resource
+    private ClassCourseTimetableDao classCourseTimetableDao;
 
     private Executor courseSpiderExecutor = new MDCThreadPool(7, 7, 0L, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(), r -> new Thread(r, "courseSpider"));
@@ -107,6 +109,15 @@ public class CourseTimeTableService {
         }
     }
 
+    public List<CourseTimeTableVo> getCourseTimeTableByStudent2(Student student) {
+        List<Integer> idList = getCourseTimeTableIdByAccount(student.getAccount());
+        if (idList.isEmpty()) {
+            return getCourseTimeTableByStudentFromSpider(student);
+        } else {
+            return transCourseTimeTableToVo(courseTimeTableDao.selectCourseTimeTable(idList));
+        }
+    }
+
     List<CourseTimeTableVo> getCourseTimeTableByStudentFromSpider(Student student) {
         try {
             CompletableFuture<UrpCourseTimeTableForSpider> future =
@@ -123,6 +134,26 @@ public class CourseTimeTableService {
 
         } catch (UrpRequestException | InterruptedException | ExecutionException | TimeoutException e) {
             return getCurrentTermCourseTimetableVOByClazz(student);
+        }
+    }
+
+    List<CourseTimeTableVo> getCourseTimeTableByStudentFromSpider2(Student student) {
+        try {
+            CompletableFuture<UrpCourseTimeTableForSpider> future =
+                    CompletableFuture.supplyAsync(() -> getCourseTimeTableDetails(student), courseSpiderExecutor);
+
+            UrpCourseTimeTableForSpider tableForSpider = future.get(3000L, TimeUnit.MILLISECONDS);
+            if (!hasSchoolCourse(tableForSpider)) {
+                return transCourseTimeTableToVo(getCourseTimetableByClazz(student));
+            } else {
+                List<CourseTimetable> list = getCourseTimetableList(tableForSpider);
+                saveCourseTimeTableDetailsFromSearch2(list, student);
+                return transCourseTimeTableToVo(list);
+            }
+
+        } catch (UrpRequestException | InterruptedException | ExecutionException | TimeoutException e) {
+            System.out.println("进入catch");
+            return transCourseTimeTableToVo(getCourseTimetableByClazz2(student));
         }
     }
 
@@ -222,6 +253,19 @@ public class CourseTimeTableService {
         }
     }
 
+    private void saveRelative2(List<Integer> needInsertIds, Student student, String termYear, Integer termOrder) {
+        List<StudentCourseTimeTable> list = new ArrayList<>();
+        for (Integer id : needInsertIds) {
+            list.add(new StudentCourseTimeTable()
+                    .setCourseTimetableId(id)
+                    .setStudentId(student.getAccount())
+                    .setTermYear(termYear)
+                    .setTermOrder(termOrder)
+            );
+            studentCourseTimeTableDao.insertstudent_course_time_table(list);
+        }
+    }
+
     /**
      * 将课程搜索结果保存到数据库中，数据来源是不包含学生信息
      */
@@ -237,6 +281,21 @@ public class CourseTimeTableService {
         //关联班级和课程详情
         if (!CollectionUtils.isEmpty(idList)) {
             saveRelative(idList, student, termYear, termOrder);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void saveCourseTimeTableDetailsFromSearch2(List<CourseTimetable> courseTimetableList, Student student) {
+        if (courseTimetableList.isEmpty()) {
+            return;
+        }
+        String termYear = courseTimetableList.get(0).getTermYear();
+        Integer termOrder = courseTimetableList.get(0).getTermOrder();
+
+        List<Integer> idList = getCourseTimetableIdList(courseTimetableList);
+        //关联班级和课程详情
+        if (!CollectionUtils.isEmpty(idList)) {
+            saveRelative2(idList, student, termYear, termOrder);
         }
     }
 
@@ -283,6 +342,17 @@ public class CourseTimeTableService {
         return courseTimeTableDao.selectByStudentRelative(table);
     }
 
+    private List<Integer> getCourseTimeTableIdByAccount(Integer account) {
+        SchoolTime schoolTime = DateUtils.getCurrentSchoolTime();
+
+        StudentCourseTimeTable table = new StudentCourseTimeTable()
+                .setStudentId(account)
+                .setTermOrder(schoolTime.getTerm().getOrder())
+                .setTermYear(schoolTime.getTerm().getTermYear());
+        List<StudentCourseTimeTable> tableList = studentCourseTimeTableDao.selectByExample(table);
+        return tableList.stream().map(StudentCourseTimeTable::getCourseTimetableId).collect(Collectors.toList());
+    }
+
     List<CourseTimetable> getCurrentTermCourseTimetableByClass(String classNum) {
 
         if (StringUtils.isEmpty(classNum)) {
@@ -314,5 +384,40 @@ public class CourseTimeTableService {
         List<CourseTimetable> timetableList = getCurrentTermCourseTimetableByClass(student);
         return transCourseTimeTableToVo(timetableList);
     }
+
+    private List<CourseTimetable> getCourseTimetableByClazz(Student student) {
+        UrpClass urpClass = classService.getUrpClassByStudent(student);
+        if(urpClass == null){
+            return Collections.emptyList();
+        }
+
+        return getCourseTimetableByClazz(urpClass);
+    }
+
+    private List<CourseTimetable> getCourseTimetableByClazz2(Student student) {
+        UrpClass urpClass = classService.getUrpClassByStudent(student);
+        if(urpClass == null){
+            return Collections.emptyList();
+        }
+
+        return getCourseTimetableByClazz2(urpClass);
+    }
+
+    private List<CourseTimetable> getCourseTimetableByClazz(UrpClass urpClass) {
+        return classCourseTimetableDao.selectByPojo(new ClassCourseTimetable().setClassId(urpClass.getClassNum()))
+                .stream()
+                .map(x -> courseTimeTableDao.selectByPrimaryKey(x.getCourseTimetableId()))
+                .collect(Collectors.toList());
+    }
+    private List<CourseTimetable> getCourseTimetableByClazz2(UrpClass urpClass) {
+        List<ClassCourseTimetable> classCourseTimetables= classCourseTimetableDao.selectByPojo(new ClassCourseTimetable().setClassId(urpClass.getClassNum()));
+        List<Integer> list = new ArrayList<>();
+        for (ClassCourseTimetable classCourseTimetable : classCourseTimetables
+        ) {
+            list.add(classCourseTimetable.getCourseTimetableId());
+        }
+        return courseTimeTableDao.selectcourse_timetable(list);
+    }
+
 
 }

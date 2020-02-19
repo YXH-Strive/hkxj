@@ -86,6 +86,20 @@
     course_sequence_number, week_description, class_distinct, term_year, term_order, 
     gmt_create
   </sql>
+    <select id="selectCourseTimeTable" parameterType="java.util.List" resultMap="BaseResultMap">
+        select * from course_timetable
+        where 1=1 and id in
+        <foreach collection="idList" item="idList" index ="index" open="(" separator="," close=")">
+            #{idList}
+        </foreach>
+    </select>
+    <select id="selectcourse_timetable" parameterType="java.util.List" resultMap="BaseResultMap">
+        select * from course_timetable
+        where 1=1 and id in
+        <foreach collection="courseTimetableId" item="courseTimetableId" index ="index" open="(" separator="," close=")">
+            #{courseTimetableId}
+        </foreach>
+    </select>
   <select id="selectByExample" resultMap="BaseResultMap" parameterType="cn.hkxj.platform.pojo.example.CourseTimetableExample" >
     select
     <if test="distinct" >

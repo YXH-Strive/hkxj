@@ -17,6 +17,10 @@ public class StudentCourseTimeTableDao {
         studentCourseTimeTableMapper.insertSelective(studentCourseTimeTable);
     }
 
+    public void insertstudent_course_time_table(List<StudentCourseTimeTable> studentCourseTimeTable){
+        studentCourseTimeTableMapper.insertstudent_course_time_table(studentCourseTimeTable);
+    }
+
     public List<StudentCourseTimeTable> selectByExample(StudentCourseTimeTable studentCourseTimeTable){
         StudentCourseTimeTableExample example = new StudentCourseTimeTableExample();
         StudentCourseTimeTableExample.Criteria criteria = example.createCriteria();

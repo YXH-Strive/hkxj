@@ -47,7 +47,14 @@ public class CourseTimeTableServiceTest {
         }
 
     }
+    @Test
+    public void getCourseTimeTableByStudent2() {
+        Student student = studentDao.selectStudentByAccount(2017025717);
+        for (CourseTimeTableVo courseTimeTableVo : courseTimeTableService.getCourseTimeTableByStudent2(student)) {
+            System.out.println(courseTimeTableVo);
+        }
 
+    }
 
     @Test
     public void fix() {
@@ -73,6 +80,15 @@ public class CourseTimeTableServiceTest {
     public void getCourseTimeTableByStudentFromSpider() {
         Student student = studentDao.selectStudentByAccount(2016024986);
         for (CourseTimeTableVo vo : courseTimeTableService.getCourseTimeTableByStudentFromSpider(student)) {
+            System.out.println(vo);
+        }
+
+    }
+
+    @Test
+    public void getCourseTimeTableByStudentFromSpider2() {
+        Student student = studentDao.selectStudentByAccount(2016024986);
+        for (CourseTimeTableVo vo : courseTimeTableService.getCourseTimeTableByStudentFromSpider2(student)) {
             System.out.println(vo);
         }
 

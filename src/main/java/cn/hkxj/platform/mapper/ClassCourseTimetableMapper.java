@@ -23,6 +23,8 @@ public interface ClassCourseTimetableMapper {
 
     List<ClassCourseTimetable> selectByExample(ClassCourseTimetableExample example);
 
+    List<ClassCourseTimetable> selectClassCourseTimetable(@Param("classId") List<String> classId);
+
     ClassCourseTimetable selectByPrimaryKey(Integer id);
 
     int updateByExampleSelective(@Param("record") ClassCourseTimetable record, @Param("example") ClassCourseTimetableExample example);

@@ -102,11 +102,11 @@
     </if>
   </delete>
   <insert id="insert" parameterType="cn.hkxj.platform.pojo.WechatOpenid">
-    insert into wechat_openid (id, openid, account, 
-      gmt_create, gmt_modified, is_bind, 
+    insert into hkxj_beta.wechat_openid (id, openid, account,
+      gmt_create, gmt_modified, is_bind,
       appid)
-    values (#{id,jdbcType=INTEGER}, #{openid,jdbcType=VARCHAR}, #{account,jdbcType=INTEGER}, 
-      #{gmtCreate,jdbcType=TIMESTAMP}, #{gmtModified,jdbcType=TIMESTAMP}, #{isBind,jdbcType=BIT}, 
+    values (#{id,jdbcType=INTEGER}, #{openid,jdbcType=VARCHAR}, #{account,jdbcType=INTEGER},
+      #{gmtCreate,jdbcType=TIMESTAMP}, #{gmtModified,jdbcType=TIMESTAMP}, #{isBind,jdbcType=BIT},
       #{appid,jdbcType=VARCHAR})
   </insert>
   <insert id="insertSelective" parameterType="cn.hkxj.platform.pojo.WechatOpenid">

@@ -21,6 +21,8 @@ public interface StudentCourseTimeTableMapper {
 
     int insertSelective(StudentCourseTimeTable record);
 
+    int insertstudent_course_time_table(@Param("studentCourseTimeTable")List<StudentCourseTimeTable> studentCourseTimeTable);
+
     List<StudentCourseTimeTable> selectByExample(StudentCourseTimeTableExample example);
 
     StudentCourseTimeTable selectByPrimaryKey(Integer id);

@@ -105,6 +105,13 @@
     values (#{id,jdbcType=INTEGER}, #{studentId,jdbcType=INTEGER}, #{courseTimetableId,jdbcType=INTEGER}, 
       #{termYear,jdbcType=VARCHAR}, #{termOrder,jdbcType=INTEGER})
   </insert>
+  <insert id="insertstudent_course_time_table" parameterType="java.util.List">
+    insert into student_course_time_table(id, student_id, course_timetable_id, term_order)
+    values
+    <foreach collection="studentCourseTimeTable" index="index" item="studentCourseTimeTable" open="" separator="," close="">
+      (#{studentCourseTimeTable.id},#{studentCourseTimeTable.student_id},#{studentCourseTimeTable.course_timetable_id},#{studentCourseTimeTable.term_order})
+    </foreach>
+  </insert>
   <insert id="insertSelective" parameterType="cn.hkxj.platform.pojo.StudentCourseTimeTable" >
     insert into student_course_time_table
     <trim prefix="(" suffix=")" suffixOverrides="," >
